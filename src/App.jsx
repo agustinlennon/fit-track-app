@@ -5,9 +5,26 @@ import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, d
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE FIREBASE (FINAL) ---
-const firebaseConfig = JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG);
-const appId = firebaseConfig.appId;
+// Esta función ahora inicializa Firebase de forma segura.
+function initializeFirebase() {
+  try {
+    const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
+    if (!firebaseConfigString) {
+      console.error("Firebase config not found in environment variables.");
+      return null;
+    }
+    const firebaseConfig = JSON.parse(firebaseConfigString);
+    const app = initializeApp(firebaseConfig);
+    return { app, config: firebaseConfig };
+  } catch (error) {
+    console.error("Error initializing Firebase:", error);
+    return null;
+  }
+}
+
+const firebaseData = initializeFirebase();
+const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
+
 
 // --- COMPONENTES DE LA UI ---
 
@@ -50,7 +67,6 @@ const Modal = ({ isOpen, onClose, title, children }) => {
   );
 };
 
-// --- COMPONENTES DE ESQUELETO (LOADING) ---
 const DashboardSkeleton = () => (
     <div className="space-y-6 animate-pulse">
         <div className="h-28 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
@@ -62,17 +78,18 @@ const DashboardSkeleton = () => (
     </div>
 );
 
-// --- COMPONENTES PRINCIPALES DE LA APP ---
-
 const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }) => {
   if (!userData) {
     return <DashboardSkeleton />;
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const todaysLog = dailyLog[today] || { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false, workout: '' };
+  // **FIX:** Ensure todaysLog always has a `loggedFoods` array to prevent crash.
+  const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false, workout: '' };
+  const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
 
   const totals = useMemo(() => {
+    // This reduce is now safe because `todaysLog.loggedFoods` is guaranteed to be an array.
     return todaysLog.loggedFoods.reduce((acc, food) => {
       acc.calories += food.calories;
       acc.protein += food.protein;
@@ -126,7 +143,7 @@ const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
           <div className="relative w-40 h-40">
             <svg className="w-full h-full" viewBox="0 0 36 36">
-              <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" className="text-gray-200 dark:text-gray-700" fill="none" stroke="currentColor" strokeWidth="3" />
+              <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" className="text-gray-200 dark:bg-gray-700" fill="none" stroke="currentColor" strokeWidth="3" />
               <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" className="text-blue-500" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${getProgress(totals.calories, goals.calories)}, 100`} strokeLinecap="round" transform="rotate(90 18 18)" />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -174,7 +191,7 @@ const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }
 
 const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => {
     const today = new Date().toISOString().slice(0, 10);
-    const todaysLog = dailyLog[today] || { loggedFoods: [] };
+    const todaysLog = { loggedFoods: [], ...(dailyLog[today] || {}) };
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedMeal, setSelectedMeal] = useState('desayuno');
 
@@ -202,7 +219,7 @@ const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => 
                         </div>
                         <ul className="space-y-2">
                             {getFoodsForMeal(key).length > 0 ? getFoodsForMeal(key).map((food, index) => (
-                                <li key={index} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md">
+                                <li key={`${food.foodId}-${index}`} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md">
                                     <div>
                                         <p className="font-semibold text-gray-800 dark:text-gray-100">{food.foodName}</p>
                                         <p className="text-sm text-gray-500 dark:text-gray-400">{food.quantity}g - {Math.round(food.calories)} kcal</p>
@@ -466,8 +483,8 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
         };
 
         try {
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig };
-            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             
@@ -536,11 +553,9 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
     );
 };
 
-
 export default function App() {
     const [isAuthReady, setIsAuthReady] = useState(false);
-    const [db, setDb] = useState(null);
-    const [auth, setAuth] = useState(null);
+    const [firebaseServices, setFirebaseServices] = useState(null);
     const [userId, setUserId] = useState(null);
     const [view, setView] = useState('dashboard');
     const [isDarkMode, setIsDarkMode] = useState(true);
@@ -551,33 +566,35 @@ export default function App() {
     const [foodDatabase, setFoodDatabase] = useState([]);
 
     useEffect(() => {
-      try {
-        const app = initializeApp(firebaseConfig);
-        const firestoreDb = getFirestore(app);
-        const firebaseAuth = getAuth(app);
-        setDb(firestoreDb); 
-        setAuth(firebaseAuth);
+        if(firebaseData) {
+            const { app } = firebaseData;
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            setFirebaseServices({ auth, db, app });
 
-        onAuthStateChanged(firebaseAuth, async (user) => {
-          if (user) { 
-            setUserId(user.uid);
-          } else {
-            await signInAnonymously(firebaseAuth);
-          }
-          setIsAuthReady(true);
-        });
-      } catch (error) {
-        console.error("Error initializing Firebase:", error);
-      }
+            onAuthStateChanged(auth, async (user) => {
+                if (user) { 
+                    setUserId(user.uid);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                setIsAuthReady(true);
+            });
+        } else {
+             setIsAuthReady(true);
+        }
     }, []);
 
-    const handleAddFood = useCallback(async (foodData) => {
-        if (!db || !userId) return;
-        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
-    }, [db, userId]);
+    const handleAddFoodToDb = useCallback(async (foodData) => {
+        if (!firebaseServices || !userId) return;
+        const { db, app } = firebaseServices;
+        await addDoc(collection(db, `artifacts/${app.options.appId}/users/${userId}/foodDatabase`), foodData);
+    }, [firebaseServices, userId]);
 
     useEffect(() => {
-        if (isAuthReady && db && userId) {
+        if (isAuthReady && firebaseServices && userId) {
+            const { db, app } = firebaseServices;
+            const appId = app.options.appId;
             const userDocPath = `artifacts/${appId}/users/${userId}`;
             
             const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (doc) => {
@@ -591,23 +608,28 @@ export default function App() {
                 const foods = snap.docs.map(d => ({ ...d.data(), id: d.id }));
                 setFoodDatabase(foods);
                 if (foods.length === 0) {
-                    [{ name: 'Pechuga de Pollo', c: 165, p: 31, h: 0, g: 3.6 }, { name: 'Arroz Blanco Cocido', c: 130, p: 2.7, h: 28, g: 0.3 }, { name: 'Huevo Entero', c: 155, p: 13, h: 1.1, g: 11 }, { name: 'Avena en Hojuelas', c: 389, p: 16.9, h: 66.3, g: 6.9 }].forEach(f => handleAddFood({name:f.name, calories_per_100g: f.c, protein_per_100g: f.p, carbs_per_100g: f.h, fat_per_100g: f.g}));
+                    [{ name: 'Pechuga de Pollo', c: 165, p: 31, h: 0, g: 3.6 }, { name: 'Arroz Blanco Cocido', c: 130, p: 2.7, h: 28, g: 0.3 }, { name: 'Huevo Entero', c: 155, p: 13, h: 1.1, g: 11 }, { name: 'Avena en Hojuelas', c: 389, p: 16.9, h: 66.3, g: 6.9 }].forEach(f => handleAddFoodToDb({name:f.name, calories_per_100g: f.c, protein_per_100g: f.p, carbs_per_100g: f.h, fat_per_100g: f.g}));
                 }
             });
             return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); };
         }
-    }, [isAuthReady, db, userId, handleAddFood]);
+    }, [isAuthReady, firebaseServices, userId, handleAddFoodToDb]);
 
-    const handleUpdateGoals = async (newGoals) => { if (!db || !userId) return; await updateDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), { goals: newGoals }); };
-    const handleUpdateSchedule = async (newSchedule) => { if (!db || !userId) return; await updateDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutSchedule: newSchedule }); };
-    const handleLogFood = useCallback(async (date, data, merge = false) => { if (!db || !userId) return; await setDoc(doc(db, `artifacts/${appId}/users/${userId}/dailyLogs`, date), data, { merge: merge }); }, [db, userId]);
-    const handleAddWeight = async (weight) => { if (!db || !userId) return; await addDoc(collection(db, `artifacts/${appId}/users/${userId}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
-    const handleDeleteFood = async (foodId) => { if (!db || !userId) return; await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/foodDatabase`, foodId)); };
+    const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { goals: newGoals }); };
+    const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutSchedule: newSchedule }); };
+    const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !userId) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, userId]);
+    const handleAddWeight = async (weight) => { if (!firebaseServices || !userId) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
+    const handleDeleteFood = async (foodId) => { if (!firebaseServices || !userId) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/foodDatabase`, foodId)); };
+    const handleAddFood = async (foodData) => { await handleAddFoodToDb(foodData); };
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
-    if (!isAuthReady || !userId) {
-        return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Conectando...</p></div></div>;
+    if (!isAuthReady || !firebaseServices) {
+        return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Inicializando...</p></div></div>;
+    }
+    
+    if(!userId) {
+       return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Autenticando...</p></div></div>;
     }
 
     const renderView = () => {
