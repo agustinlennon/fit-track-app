@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, where, writeBatch, arrayUnion, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, where, writeBatch, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Youtube, Link as LinkIcon, Bot, Send, Dumbbell, Utensils, Calendar, BarChart2, User, Settings as SettingsIcon, PlusCircle, Trash2, Sun, Moon, Flame, ChevronLeft, ChevronRight, X, Edit, MessageSquare, Plus, Check } from 'lucide-react';
 
@@ -70,9 +70,14 @@ const Input = React.forwardRef((props, ref) => (
 
 // --- DASHBOARD COMPONENTS ---
 const NextWorkout = ({ schedule, setView, setWorkoutData, dayOfWeek }) => {
-  const workout = schedule ? (schedule[dayOfWeek] || []) : [];
-  
+  const workoutForToday = schedule ? (schedule[dayOfWeek] || []) : [];
+  const workout = Array.isArray(workoutForToday) ? workoutForToday : [];
+
   const handleStartWorkout = () => {
+    if (!Array.isArray(workoutForToday)) {
+      alert("Por favor, actualiza tu plan semanal para añadir ejercicios específicos a este día.");
+      return;
+    }
     setWorkoutData(workout);
     setView('workoutSession');
   };
@@ -81,6 +86,9 @@ const NextWorkout = ({ schedule, setView, setWorkoutData, dayOfWeek }) => {
     <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
       <h2 className="text-2xl font-bold mb-2">Próximo Entrenamiento</h2>
       <p className="capitalize text-blue-100 mb-4">{dayOfWeek}</p>
+      {typeof workoutForToday === 'string' && (
+         <p className="text-lg bg-white/10 p-3 rounded-lg mb-4">{workoutForToday}</p>
+      )}
       {workout.length > 0 ? (
         <>
           <ul className="space-y-2 mb-4">
@@ -94,32 +102,71 @@ const NextWorkout = ({ schedule, setView, setWorkoutData, dayOfWeek }) => {
           </ul>
           <Button onClick={handleStartWorkout} className="w-full bg-white text-blue-600 hover:bg-blue-100">Comenzar Entrenamiento</Button>
         </>
-      ) : (
+      ) : typeof workoutForToday !== 'string' ? (
         <p>¡Día de descanso! Aprovecha para recuperar.</p>
-      )}
+      ) : null}
     </Card>
   );
 };
 
+const Macronutrients = ({ dailyLog, goals }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysLog = { loggedFoods: [], ...(dailyLog[today] || {}) };
+  const totals = useMemo(() => {
+    return (todaysLog.loggedFoods || []).reduce((acc, food) => {
+      acc.calories += food.calories || 0;
+      acc.protein += food.protein || 0;
+      acc.carbs += food.carbs || 0;
+      acc.fat += food.fat || 0;
+      return acc;
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  }, [todaysLog.loggedFoods]);
+  
+  const getProgress = (current, goal) => (goal > 0 ? (current / goal) * 100 : 0);
+
+  return (
+    <Card>
+      <h3 className="font-bold text-xl mb-4">Macronutrientes de Hoy</h3>
+      <div className="space-y-3">
+        {['calories', 'protein', 'carbs', 'fat'].map(macro => {
+          const current = totals[macro];
+          const goal = goals[macro];
+          return (
+            <div key={macro}>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-semibold capitalize text-gray-700 dark:text-gray-300">{macro}</span>
+                <span>{Math.round(current)} / {goal} {macro === 'calories' ? 'kcal' : 'g'}</span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                 <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${Math.min(getProgress(current, goal), 100)}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+};
+
+
 // --- WORKOUT SESSION COMPONENTS ---
-const WorkoutSession = ({ workoutData, setView, exerciseDatabase }) => {
+const WorkoutSession = ({ workoutData, setView }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     if (!workoutData || workoutData.length === 0) {
         return (
-            <div className="text-center">
-                <p>No hay entrenamiento para hoy.</p>
+            <div className="text-center p-6">
+                <p className="text-lg">No hay entrenamiento para hoy.</p>
                 <Button onClick={() => setView('dashboard')} className="mt-4">Volver al Dashboard</Button>
             </div>
         );
     }
-
     const currentExercise = workoutData[currentIndex];
 
     return (
         <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Sesión de Entrenamiento</h2>
-                 <Button onClick={() => setView('dashboard')} variant="secondary"><X size={18}/> Salir</Button>
+                 <Button onClick={() => setView('dashboard')} variant="ghost"><X size={24}/></Button>
             </div>
             
             <Card className="flex-grow flex flex-col justify-between text-center">
@@ -127,50 +174,41 @@ const WorkoutSession = ({ workoutData, setView, exerciseDatabase }) => {
                     <p className="text-sm text-gray-500 dark:text-gray-400">Ejercicio {currentIndex + 1} / {workoutData.length}</p>
                     <h3 className="text-3xl md:text-4xl font-bold my-4 text-blue-600 dark:text-blue-400">{currentExercise.name}</h3>
                     <div className="flex justify-center gap-6 my-8 text-lg">
-                        <div className="text-center">
-                            <p className="text-gray-500 dark:text-gray-400">Series</p>
-                            <p className="font-bold text-2xl">{currentExercise.sets}</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-gray-500 dark:text-gray-400">Reps</p>
-                            <p className="font-bold text-2xl">{currentExercise.reps}</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-gray-500 dark:text-gray-400">Peso</p>
-                            <p className="font-bold text-2xl">{currentExercise.weight}</p>
-                        </div>
+                        <div><p className="text-gray-500 dark:text-gray-400">Series</p><p className="font-bold text-2xl">{currentExercise.sets}</p></div>
+                        <div><p className="text-gray-500 dark:text-gray-400">Reps</p><p className="font-bold text-2xl">{currentExercise.reps}</p></div>
+                        <div><p className="text-gray-500 dark:text-gray-400">Peso</p><p className="font-bold text-2xl">{currentExercise.weight}</p></div>
                     </div>
                 </div>
-
                 <div className="mt-auto space-y-4">
                   {currentExercise.videoUrl && (
                     <a href={currentExercise.videoUrl} target="_blank" rel="noopener noreferrer" className="w-full bg-red-500 text-white hover:bg-red-600 focus:ring-red-500 px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900">
                       <Youtube size={20} /> Ver Video
                     </a>
                   )}
-                  <Button onClick={() => setView('aiChat')} className="w-full" variant="secondary">
-                      <Bot size={20}/> Asistente IA
-                  </Button>
+                  <Button onClick={() => setView('aiChat')} className="w-full" variant="secondary"><Bot size={20}/> Asistente IA</Button>
                 </div>
             </Card>
 
             <div className="flex justify-between mt-4">
-                <Button onClick={() => setCurrentIndex(i => Math.max(i - 1, 0))} disabled={currentIndex === 0}>
-                    <ChevronLeft /> Anterior
-                </Button>
+                <Button onClick={() => setCurrentIndex(i => Math.max(i - 1, 0))} disabled={currentIndex === 0}><ChevronLeft /> Anterior</Button>
                 {currentIndex === workoutData.length - 1 ? (
                    <Button onClick={() => { alert("¡Entrenamiento completado!"); setView('dashboard'); }} variant="primary">Finalizar</Button>
                 ) : (
-                   <Button onClick={() => setCurrentIndex(i => Math.min(i + 1, workoutData.length - 1))}>
-                     Siguiente <ChevronRight />
-                   </Button>
+                   <Button onClick={() => setCurrentIndex(i => Math.min(i + 1, workoutData.length - 1))}>Siguiente <ChevronRight /></Button>
                 )}
             </div>
         </div>
     );
 };
 
-// ... Rest of the components (Planner, Food, Progress etc) will be defined below ...
+// Placeholder for other components.
+const FoodLogger = ({handleGoBack}) => <Card><Button onClick={handleGoBack}>Volver</Button> Placeholder Comidas</Card>;
+const ExerciseManager = ({handleGoBack}) => <Card><Button onClick={handleGoBack}>Volver</Button> Placeholder Ejercicios</Card>;
+const ProgressTracker = ({handleGoBack}) => <Card><Button onClick={handleGoBack}>Volver</Button> Placeholder Progreso</Card>;
+const AppSettings = ({handleGoBack}) => <Card><Button onClick={handleGoBack}>Volver</Button> Placeholder Ajustes</Card>;
+const AiChat = ({handleGoBack}) => <Card><Button onClick={handleGoBack}>Volver</Button> Placeholder Chat</Card>;
+const Planner = ({handleGoBack}) => <Card><Button onClick={handleGoBack}>Volver</Button> Placeholder Plan Semanal</Card>;
+
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
@@ -187,7 +225,7 @@ export default function App() {
     const [foodDatabase, setFoodDatabase] = useState([]);
     const [exerciseDatabase, setExerciseDatabase] = useState([]);
     const [chatHistory, setChatHistory] = useState([]);
-    const [workoutData, setWorkoutData] = useState([]); // For the current session
+    const [workoutData, setWorkoutData] = useState([]);
 
     const dayOfWeek = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
 
@@ -200,64 +238,40 @@ export default function App() {
             setFirebaseServices({ auth, db, app });
 
             onAuthStateChanged(auth, async (user) => {
-                if (user) { 
-                    setUserId(user.uid);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                if (user) { setUserId(user.uid); } 
+                else { await signInAnonymously(auth); }
                 setIsAuthReady(true);
             });
+        } else {
+          setIsAuthReady(true); // Still ready, but with no services
         }
     }, []);
     
-    // --- Firestore Data Handlers ---
-    const handleUpdateData = useCallback(async (path, data) => {
-        if (!firebaseServices || !userId) return;
-        await setDoc(doc(firebaseServices.db, path), data, { merge: true });
-    }, [firebaseServices, userId]);
-
     // Fetch all data
     useEffect(() => {
         if (isAuthReady && firebaseServices && userId) {
             const basePath = `artifacts/${appId}/users/${userId}`;
-
-            const unsubProfile = onSnapshot(doc(firebaseServices.db, `${basePath}/profile/data`), (doc) => {
-                if (doc.exists()) {
-                    setUserData(doc.data());
-                } else {
-                    // Create initial profile
-                    handleUpdateData(`${basePath}/profile/data`, { 
-                        goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
-                        workoutSchedule: { lunes: [], martes: [], miercoles: [], jueves: [], viernes: [], sabado: [], domingo: [] }
-                    });
-                }
-            });
-
-            // Other snapshots for logs, weight, food, exercises, chat...
-            const unsubDailyLogs = onSnapshot(collection(firebaseServices.db, `${basePath}/dailyLogs`), snap => {
-                 setDailyLog(snap.docs.reduce((acc, doc) => ({ ...acc, [doc.id]: doc.data() }), {}));
-            });
-            const unsubWeight = onSnapshot(query(collection(firebaseServices.db, `${basePath}/weightHistory`)), snap => {
-                setWeightHistory(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date)));
-            });
-            const unsubFood = onSnapshot(collection(firebaseServices.db, `${basePath}/foodDatabase`), snap => setFoodDatabase(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
-            const unsubExercises = onSnapshot(collection(firebaseServices.db, `${basePath}/exerciseDatabase`), snap => setExerciseDatabase(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
-            const unsubChat = onSnapshot(query(collection(firebaseServices.db, `${basePath}/chatHistory`)), snap => {
-                if (!snap.empty) {
-                    setChatHistory(snap.docs[0].data().messages || []);
-                }
-            });
-
-            return () => {
-                unsubProfile();
-                unsubDailyLogs();
-                unsubWeight();
-                unsubFood();
-                unsubExercises();
-                unsubChat();
-            };
+            const unsubs = [
+                onSnapshot(doc(firebaseServices.db, `${basePath}/profile/data`), (doc) => {
+                    if (doc.exists()) {
+                        setUserData(doc.data());
+                    } else {
+                       setDoc(doc.ref, { 
+                            goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
+                            workoutSchedule: { lunes: [], martes: [], miercoles: [], jueves: [], viernes: [], sabado: [], domingo: [] }
+                        });
+                    }
+                }),
+                onSnapshot(collection(firebaseServices.db, `${basePath}/dailyLogs`), snap => {
+                     setDailyLog(snap.docs.reduce((acc, doc) => ({ ...acc, [doc.id]: doc.data() }), {}));
+                }),
+                onSnapshot(query(collection(firebaseServices.db, `${basePath}/weightHistory`)), snap => {
+                    setWeightHistory(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date)));
+                }),
+            ];
+            return () => unsubs.forEach(unsub => unsub());
         }
-    }, [isAuthReady, firebaseServices, userId, handleUpdateData]);
+    }, [isAuthReady, firebaseServices, userId]);
     
      // --- UI Mode ---
     useEffect(() => {
@@ -274,9 +288,13 @@ export default function App() {
             case 'dashboard':
                 return <NextWorkout schedule={userData.workoutSchedule} setView={setView} setWorkoutData={setWorkoutData} dayOfWeek={dayOfWeek} />;
             case 'workoutSession':
-                return <WorkoutSession workoutData={workoutData} setView={setView} exerciseDatabase={exerciseDatabase} />;
-            // Define other views here, calling the appropriate components.
-            // For now, let's keep it simple for brevity
+                return <WorkoutSession workoutData={workoutData} setView={setView} />;
+            case 'planner': return <Planner handleGoBack={() => setView('dashboard')} />;
+            case 'food': return <FoodLogger handleGoBack={() => setView('dashboard')} />;
+            case 'exercises': return <ExerciseManager handleGoBack={() => setView('dashboard')} />;
+            case 'progress': return <ProgressTracker handleGoBack={() => setView('dashboard')} />;
+            case 'settings': return <AppSettings handleGoBack={() => setView('dashboard')} />;
+            case 'aiChat': return <AiChat handleGoBack={() => setView('dashboard')} />;
             default:
                 return <NextWorkout schedule={userData.workoutSchedule} setView={setView} setWorkoutData={setWorkoutData} dayOfWeek={dayOfWeek} />;
         }
@@ -312,8 +330,7 @@ export default function App() {
                {renderView()}
                {view === 'dashboard' && (
                  <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Placeholder for Macronutrients and Weight Progress */}
-                    <Card><h3 className="font-bold text-xl">Macronutrientes</h3>{/* ... content ... */}</Card>
+                    <Macronutrients dailyLog={dailyLog} goals={userData.goals}/>
                     <Card><h3 className="font-bold text-xl">Progreso de Peso</h3>{/* ... content ... */}</Card>
                  </div>
                )}
