@@ -9,13 +9,9 @@ import { Youtube, Link as LinkIcon, Bot, Send, Dumbbell, Utensils, Calendar, Bar
 function initializeFirebase() {
   try {
     const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
-    if (!firebaseConfigString) {
-      console.error("Firebase config not found in environment variables.");
+    if (!firebaseConfigString || firebaseConfigString === 'undefined') {
+      console.error("Firebase config not found or is 'undefined' in environment variables.");
       return null;
-    }
-    if(firebaseConfigString === 'undefined') {
-       console.error("Firebase config is 'undefined' string");
-       return null;
     }
     const firebaseConfig = JSON.parse(firebaseConfigString);
      if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
@@ -161,7 +157,7 @@ export default function App() {
             console.error("Error updating data:", error);
         }
     }, [firebaseServices, userId]);
-
+    
     const handleAddToList = useCallback(async (path, data) => {
         if(!firebaseServices || !userId) return;
         await addDoc(collection(firebaseServices.db, path), data);
@@ -226,16 +222,16 @@ export default function App() {
       </div>
     );
     
-    const NextWorkout = () => { /* ... full implementation ... */ };
-    const Macronutrients = () => { /* ... full implementation ... */ };
-    const WeightProgressPreview = () => { /* ... full implementation ... */ };
-    const WorkoutSession = () => { /* ... full implementation ... */ };
-    const Planner = () => { /* ... full implementation ... */ };
-    const FoodManager = () => { /* ... full implementation ... */ };
-    const ExerciseManager = () => { /* ... full implementation ... */ };
-    const ProgressTracker = () => { /* ... full implementation ... */ };
-    const AppSettings = () => { /* ... full implementation ... */ };
-    const AiChat = () => { /* ... full implementation ... */ };
+    const NextWorkout = () => { /* ... */ };
+    const Macronutrients = () => { /* ... */ };
+    const WeightProgressPreview = () => { /* ... */ };
+    const WorkoutSession = () => { /* ... */ };
+    const Planner = () => { /* ... */ };
+    const FoodManager = () => { /* ... */ };
+    const ExerciseManager = () => { /* ... */ };
+    const ProgressTracker = () => { /* ... */ };
+    const AppSettings = () => { /* ... */ };
+    const AiChat = () => { /* ... */ };
 
     // --- NAVIGATION LOGIC ---
     const renderView = () => {
@@ -246,8 +242,8 @@ export default function App() {
           case 'dashboard': return <DashboardView />;
           case 'workoutSession': return <WorkoutSession workoutData={workoutData} setView={setView} />;
           case 'planner': return <Planner {...commonProps} schedule={userData.workoutSchedule} exerciseDatabase={exerciseDatabase} handleUpdateSchedule={(newSchedule) => handleUpdateData(`${dbPath}/profile/data`, { workoutSchedule: newSchedule })} />;
-          case 'food': return <FoodManager {...commonProps} foodDatabase={foodDatabase} dbPath={`${dbPath}/foodDatabase`} />;
-          case 'exercises': return <ExerciseManager {...commonProps} exerciseDatabase={exerciseDatabase} dbPath={`${dbPath}/exerciseDatabase`} />;
+          case 'food': return <FoodManager {...commonProps} foodDatabase={foodDatabase} handleAddToList={(data) => handleAddToList(`${dbPath}/foodDatabase`, data)} handleDeleteFromList={(id) => handleDeleteFromList(`${dbPath}/foodDatabase`, id)} />;
+          case 'exercises': return <ExerciseManager {...commonProps} exerciseDatabase={exerciseDatabase} handleAddToList={(data) => handleAddToList(`${dbPath}/exerciseDatabase`, data)} handleDeleteFromList={(id) => handleDeleteFromList(`${dbPath}/exerciseDatabase`, id)} />;
           case 'progress': return <ProgressTracker {...commonProps} weightHistory={weightHistory} measurementsHistory={measurementsHistory} />;
           case 'settings': return <AppSettings {...commonProps} auth={firebaseServices?.auth} handleUpdateGoals={(goals) => handleUpdateData(`${dbPath}/profile/data`, { goals })} />;
           case 'aiChat': return <AiChat {...commonProps} chatHistory={chatHistory} />;
