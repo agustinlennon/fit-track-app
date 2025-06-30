@@ -107,12 +107,14 @@ const Textarea = React.forwardRef((props, ref) => (
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
+    // --- STATE MANAGEMENT ---
     const [firebaseServices, setFirebaseServices] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [userId, setUserId] = useState(null);
     const [view, setView] = useState('dashboard');
     const [isDarkMode, setIsDarkMode] = useState(true);
     
+    // Data States
     const [userData, setUserData] = useState(null);
     const [dailyLog, setDailyLog] = useState({});
     const [weightHistory, setWeightHistory] = useState([]);
@@ -124,6 +126,7 @@ export default function App() {
 
     const dayOfWeek = useMemo(() => new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase(), []);
     
+    // --- FIREBASE INITIALIZATION & DATA FETCHING ---
     useEffect(() => {
         if(firebaseData) {
             const { app } = firebaseData;
@@ -191,6 +194,7 @@ export default function App() {
     
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
     
+    // --- LOADING STATE ---
     if (!isAuthReady || !userData) {
       return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Cargando tu plan...</p></div></div>;
     }
