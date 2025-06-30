@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, writeBatch, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { Youtube, Link as LinkIcon, Bot, Send, Dumbbell, Utensils, Calendar, BarChart2, User, Settings as SettingsIcon, PlusCircle, Trash2, Sun, Moon, Flame, ChevronLeft, ChevronRight, X, Edit, MessageSquare, Plus, Check, Play, Pause, RotateCcw, Save, LogOut } from 'lucide-react';
 
 // --- FIREBASE CONFIGURATION ---
@@ -114,6 +114,7 @@ export default function App() {
     const [view, setView] = useState('dashboard');
     const [isDarkMode, setIsDarkMode] = useState(true);
     
+    // Data States
     const [userData, setUserData] = useState(null);
     const [dailyLog, setDailyLog] = useState({});
     const [weightHistory, setWeightHistory] = useState([]);
@@ -154,6 +155,16 @@ export default function App() {
         } catch (error) {
             console.error("Error updating data:", error);
         }
+    }, [firebaseServices, userId]);
+    
+    const handleAddToList = useCallback(async (path, data) => {
+        if(!firebaseServices || !userId) return;
+        await addDoc(collection(firebaseServices.db, path), data);
+    }, [firebaseServices, userId]);
+
+    const handleDeleteFromList = useCallback(async (path, id) => {
+        if(!firebaseServices || !userId) return;
+        await deleteDoc(doc(firebaseServices.db, path, id));
     }, [firebaseServices, userId]);
 
     useEffect(() => {
@@ -202,10 +213,68 @@ export default function App() {
     
     const DashboardView = () => (
       <div className="space-y-6">
-        <p>Dashboard</p>
+        <NextWorkout />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Macronutrients />
+          <WeightProgressPreview />
+        </div>
       </div>
     );
     
+    const NextWorkout = () => {
+        const workoutForToday = userData.workoutSchedule ? (userData.workoutSchedule[dayOfWeek] || []) : [];
+        const isWorkoutArray = Array.isArray(workoutForToday);
+        const workout = isWorkoutArray ? workoutForToday : [];
+
+        const handleStartWorkout = () => {
+            if (!isWorkoutArray) {
+                alert("Por favor, actualiza tu plan semanal para añadir ejercicios específicos a este día en la sección 'Plan Semanal'.");
+                return;
+            }
+            setWorkoutData(workout);
+            setView('workoutSession');
+        };
+        
+        return (
+            <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
+            <h2 className="text-2xl font-bold mb-2">Próximo Entrenamiento</h2>
+            <p className="capitalize text-blue-100 mb-4">{dayOfWeek}</p>
+            {typeof workoutForToday === 'string' && (
+                <p className="text-lg bg-white/10 p-3 rounded-lg mb-4">{workoutForToday}</p>
+            )}
+            {workout.length > 0 ? (
+                <>
+                <ul className="space-y-2 mb-4">
+                    {workout.slice(0, 3).map((ex, i) => (
+                    <li key={i} className="flex items-center gap-3 bg-white/10 p-2 rounded-lg text-sm">
+                        <Dumbbell className="text-blue-200" size={18}/>
+                        <span>{ex.name} - {ex.sets}x{ex.reps}</span>
+                    </li>
+                    ))}
+                    {workout.length > 3 && <li className="text-center text-blue-200 text-sm">y {workout.length - 3} más...</li>}
+                </ul>
+                <Button onClick={handleStartWorkout} className="w-full bg-white text-blue-600 hover:bg-blue-100">Comenzar Entrenamiento</Button>
+                </>
+            ) : !isWorkoutArray ? (
+                <Button onClick={() => setView('planner')} className="w-full bg-white/20 hover:bg-white/30">Ir al Planificador</Button>
+            ) : (
+                <p>¡Día de descanso! Aprovecha para recuperar.</p>
+            )}
+            </Card>
+        );
+    };
+    
+    const Macronutrients = () => {
+        // ... (implementation)
+        return <Card><h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-100">Macronutrientes</h3></Card>
+    };
+    
+    const WeightProgressPreview = () => (
+      <Card>
+          {/* ... */}
+      </Card>
+    );
+
     const WorkoutSession = () => { 
         return <p>Workout Session Component</p> 
     };
@@ -232,15 +301,22 @@ export default function App() {
     // --- NAVIGATION LOGIC (Corrected and Final) ---
     const renderView = () => {
       const dbPath = `artifacts/${appId}/users/${userId}`;
+      const commonProps = {
+        userData,
+        dbPath,
+        handleUpdateData,
+        handleGoBack: () => setView('dashboard')
+      };
+
       switch (view) {
           case 'dashboard': return <DashboardView />;
           case 'workoutSession': return <WorkoutSession workoutData={workoutData} setView={setView} />;
-          case 'planner': return <Planner schedule={userData.workoutSchedule} exerciseDatabase={exerciseDatabase} handleUpdateSchedule={(newSchedule) => handleUpdateData(`${dbPath}/profile/data`, { workoutSchedule: newSchedule })} handleGoBack={() => setView('dashboard')} />;
-          case 'food': return <FoodManager foodDatabase={foodDatabase} dbPath={`${dbPath}/foodDatabase`} handleGoBack={() => setView('dashboard')} />;
-          case 'exercises': return <ExerciseManager exerciseDatabase={exerciseDatabase} dbPath={`${dbPath}/exerciseDatabase`} handleGoBack={() => setView('dashboard')} />;
-          case 'progress': return <ProgressTracker weightHistory={weightHistory} measurementsHistory={measurementsHistory} dbPath={dbPath} handleGoBack={() => setView('dashboard')} />;
-          case 'settings': return <AppSettings userData={userData} auth={firebaseServices?.auth} handleUpdateGoals={(goals) => handleUpdateData(`${dbPath}/profile/data`, { goals })} handleGoBack={() => setView('dashboard')} />;
-          case 'aiChat': return <AiChat chatHistory={chatHistory} dbPath={dbPath} userData={userData} handleUpdateData={handleUpdateData} handleGoBack={() => setView('dashboard')} />;
+          case 'planner': return <Planner {...commonProps} schedule={userData.workoutSchedule} exerciseDatabase={exerciseDatabase} handleUpdateSchedule={(newSchedule) => handleUpdateData(`${dbPath}/profile/data`, { workoutSchedule: newSchedule })} />;
+          case 'food': return <FoodManager {...commonProps} foodDatabase={foodDatabase} dbPath={`${dbPath}/foodDatabase`} />;
+          case 'exercises': return <ExerciseManager {...commonProps} exerciseDatabase={exerciseDatabase} dbPath={`${dbPath}/exerciseDatabase`} />;
+          case 'progress': return <ProgressTracker {...commonProps} weightHistory={weightHistory} measurementsHistory={measurementsHistory} />;
+          case 'settings': return <AppSettings {...commonProps} auth={firebaseServices?.auth} handleUpdateGoals={(goals) => handleUpdateData(`${dbPath}/profile/data`, { goals })} />;
+          case 'aiChat': return <AiChat {...commonProps} chatHistory={chatHistory} />;
           default: return <DashboardView />;
       }
     };
