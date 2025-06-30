@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, writeBatch, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { Youtube, Link as LinkIcon, Bot, Send, Dumbbell, Utensils, Calendar, BarChart2, User, Settings as SettingsIcon, PlusCircle, Trash2, Sun, Moon, Flame, ChevronLeft, ChevronRight, X, Edit, MessageSquare, Plus, Check, Play, Pause, RotateCcw, Save, LogOut } from 'lucide-react';
 
@@ -202,8 +202,8 @@ export default function App() {
     
     const DashboardView = () => (
       <div className="space-y-6">
-        {/* Placeholder for full dashboard implementation */}
-        <p>Dashboard</p>
+        <NextWorkout schedule={userData.workoutSchedule} setView={setView} setWorkoutData={setWorkoutData} dayOfWeek={dayOfWeek} />
+        {/* Other dashboard components would go here */}
       </div>
     );
     
