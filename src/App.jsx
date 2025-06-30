@@ -139,8 +139,9 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     const filteredWorkouts = completedWorkouts.filter(w => new Date(w.date) >= startDate);
     
     const totalWorkouts = filteredWorkouts.length;
-    const totalSets = filteredWorkouts.reduce((acc, w) => acc + w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0), 0);
-    const totalReps = filteredWorkouts.reduce((acc, w) => acc + w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0), 0);
+    // CORRECCIÓN: Verificar que w.exercises sea un array antes de usar reduce
+    const totalSets = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
+    const totalReps = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0) : 0), 0);
 
     return { totalWorkouts, totalSets, totalReps };
   }, [completedWorkouts, timeFilter]);
@@ -1056,7 +1057,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
 
         const analyzeMuscles = async () => {
             setLoadingAnalysis(true);
-            const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => w.exercises.map(e => e.name)))];
+            const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
             const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
             
             try {
@@ -1070,7 +1071,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
 
                 const muscleCounts = {};
                 filteredWorkouts.forEach(workout => {
-                    workout.exercises.forEach(exercise => {
+                    (Array.isArray(workout.exercises) ? workout.exercises : []).forEach(exercise => {
                         const muscle = muscleMap[exercise.name] || 'Otro';
                         if (!muscleCounts[muscle]) {
                             muscleCounts[muscle] = 0;
@@ -1127,7 +1128,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
                     <Card key={workout.id}>
                         <h3 className="font-bold text-lg mb-2">{new Date(workout.date).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })}</h3>
                         <ul className="space-y-1">
-                            {workout.exercises.map((ex, i) => (
+                            {(Array.isArray(workout.exercises) ? workout.exercises : []).map((ex, i) => (
                                 <li key={i} className="text-sm text-gray-600 dark:text-gray-300">
                                     - {ex.name}: {ex.sets} series de {ex.reps} reps con {ex.weight}.
                                 </li>
