@@ -8,9 +8,9 @@ import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Be
 // --- INICIALIZACIÓN DE FIREBASE ---
 function initializeFirebase() {
   try {
-    const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+    const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
     if (!firebaseConfigString) {
-      console.error("Firebase config not found. Please set it up in your environment.");
+      console.error("Firebase config not found in environment variables.");
       return null;
     }
     const firebaseConfig = JSON.parse(firebaseConfigString);
