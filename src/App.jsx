@@ -139,7 +139,6 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     const filteredWorkouts = completedWorkouts.filter(w => new Date(w.date) >= startDate);
     
     const totalWorkouts = filteredWorkouts.length;
-    // CORRECCIÓN: Verificar que w.exercises sea un array antes de usar reduce
     const totalSets = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
     const totalReps = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0) : 0), 0);
 
@@ -788,11 +787,13 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         setRoutine([]);
         setError('');
 
-        // Corregida
-const historySummary = completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${(w.exercises || []).map(e => e.name).join(', ')}`).join('; ');
+        const historySummary = completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${(w.exercises || []).map(e => e.name).join(', ')}`).join('; ');
+
+        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+        const todaysPlanText = (userData.workoutSchedule[todayDay] || []).map(w => w.name).join(' y ') || 'Descanso';
 
         const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
-            Mi plan para hoy es: ${userData.workoutSchedule[new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()].map(w => w.name).join(' y ')}.
+            Mi plan para hoy es: ${todaysPlanText}.
             Mi nivel de energía hoy es: ${fatigueLevel}.
             Mi historial reciente es: ${historySummary || 'ninguno'}.
             Notas adicionales: "${userNotes || 'Ninguna'}".
@@ -1128,14 +1129,13 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
                 {filteredWorkouts.map(workout => (
                     <Card key={workout.id}>
                         <h3 className="font-bold text-lg mb-2">{new Date(workout.date).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })}</h3>
-                        // Problemática
-<ul className="space-y-1">
-    {(Array.isArray(workout.exercises) ? workout.exercises : []).map((ex, i) => (
-        <li key={i} className="text-sm text-gray-600 dark:text-gray-300">
-            - {ex.name}: {ex.sets} series de {ex.reps} reps con {ex.weight}.
-        </li>
-    ))}
-</ul>
+                        <ul className="space-y-1">
+                            {(workout.exercises || []).map((ex, i) => (
+                                <li key={i} className="text-sm text-gray-600 dark:text-gray-300">
+                                    - {ex.name}: {ex.sets} series de {ex.reps} reps con {ex.weight}.
+                                </li>
+                            ))}
+                        </ul>
                     </Card>
                 ))}
             </div>
