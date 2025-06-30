@@ -820,7 +820,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         };
 
         try {
-            const apiKey = ""; // DEJAR VACÍO
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig };
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -857,7 +857,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         Responde únicamente con el nuevo valor de calorías quemadas (ej: "60-80 kcal").`;
 
         try {
-            const apiKey = ""; // DEJAR VACÍO
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1060,7 +1060,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
             const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
             
             try {
-                const apiKey = ""; // DEJAR VACÍO
+                const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
                 const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
