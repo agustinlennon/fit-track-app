@@ -581,7 +581,7 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
 
         try {
             // CORRECCIÓN: Usar la clave API proporcionada por el entorno
-            const apiKey = ""; // Dejar vacío para que el entorno lo complete
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // Dejar vacío para que el entorno lo complete
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig };
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             
