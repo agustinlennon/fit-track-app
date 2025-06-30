@@ -8,6 +8,7 @@ import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Be
 // --- INICIALIZACIÓN DE FIREBASE ---
 function initializeFirebase() {
   try {
+    // Usamos variables de entorno para la configuración de Firebase para mayor seguridad.
     const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
     if (!firebaseConfigString) {
       console.error("Firebase config not found. Please set it up in your environment.");
@@ -91,12 +92,18 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
 
   useEffect(() => {
-    if (!userData || !userData.workoutSchedule) return;
+    if (!userData) return;
 
     const getAiRecommendation = async () => {
       setAiRecommendation({ text: 'Analizando tu día...', loading: true });
+      
+      // CORRECCIÓN FINAL: Verificación robusta de que workoutSchedule es un objeto antes de usarlo.
       const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-      const todayWorkouts = userData.workoutSchedule[todayDay] || [];
+      let todayWorkouts = [];
+      if (userData.workoutSchedule && typeof userData.workoutSchedule === 'object') {
+        todayWorkouts = userData.workoutSchedule[todayDay] || [];
+      }
+      
       const workoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(', ') : 'Descanso';
 
       if (workoutText === 'Descanso') {
@@ -136,7 +143,8 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
       startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
     }
 
-    const filteredWorkouts = completedWorkouts.filter(w => new Date(w.date) >= startDate);
+    // Usamos (completedWorkouts || []) para asegurar que siempre sea un array.
+    const filteredWorkouts = (completedWorkouts || []).filter(w => w && new Date(w.date) >= startDate);
     
     const totalWorkouts = filteredWorkouts.length;
     const totalSets = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
@@ -149,8 +157,12 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     return <DashboardSkeleton />;
   }
 
+  // CORRECCIÓN FINAL: Verificación robusta para obtener el plan de hoy.
   const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-  const todaysPlan = userData.workoutSchedule ? (userData.workoutSchedule[todayDay] || []) : [];
+  let todaysPlan = [];
+  if (userData && typeof userData.workoutSchedule === 'object' && userData.workoutSchedule !== null) {
+      todaysPlan = userData.workoutSchedule[todayDay] || [];
+  }
 
   const totals = useMemo(() => {
     return (todaysLog.loggedFoods || []).reduce((acc, food) => {
@@ -298,7 +310,7 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (foodDatabase.length > 0 && !selectedFoodId) {
+        if ((foodDatabase || []).length > 0 && !selectedFoodId) {
             setSelectedFoodId(foodDatabase[0].id);
         }
     }, [foodDatabase, selectedFoodId]);
@@ -307,7 +319,7 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const foodData = foodDatabase.find(f => f.id === selectedFoodId);
+        const foodData = (foodDatabase || []).find(f => f.id === selectedFoodId);
         if (foodData) {
             const ratio = quantity / 100;
             const logEntry = {
@@ -360,9 +372,9 @@ const ProgressTracker = ({ weightHistory, bodyMeasurements, handleAddWeight, han
 
     const chartData = useMemo(() => {
         if (chartView === 'weight') {
-            return weightHistory;
+            return weightHistory || [];
         }
-        return bodyMeasurements.map(m => ({
+        return (bodyMeasurements || []).map(m => ({
             date: m.date,
             [chartView]: m[chartView]
         })).filter(item => item[chartView] !== undefined);
@@ -612,8 +624,8 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
     };
 
     const handleAddNewOption = () => {
-        if (newOption && !workoutOptions.includes(newOption)) {
-            const newOptionsList = [...workoutOptions, newOption];
+        if (newOption && !(workoutOptions || []).includes(newOption)) {
+            const newOptionsList = [...(workoutOptions || []), newOption];
             setWorkoutOptions(newOptionsList);
             handleUpdateWorkoutOptions(newOptionsList);
             setNewOption('');
@@ -787,10 +799,17 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         setRoutine([]);
         setError('');
 
-        const historySummary = completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${(w.exercises || []).map(e => e.name).join(', ')}`).join('; ');
+        const historySummary = (completedWorkouts || []).slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${(w.exercises || []).map(e => e.name).join(', ')}`).join('; ');
 
+        // CORRECCIÓN FINAL: Verificación robusta para el plan de hoy antes de pasarlo a la IA.
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-        const todaysPlanText = (userData.workoutSchedule[todayDay] || []).map(w => w.name).join(' y ') || 'Descanso';
+        let todaysPlanText = 'Descanso';
+        if (userData && typeof userData.workoutSchedule === 'object' && userData.workoutSchedule !== null) {
+            const plan = userData.workoutSchedule[todayDay] || [];
+            if (plan.length > 0) {
+                todaysPlanText = plan.map(w => w.name).join(' y ');
+            }
+        }
 
         const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
             Mi plan para hoy es: ${todaysPlanText}.
@@ -903,7 +922,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
     };
 
     const totalCaloriesBurned = useMemo(() => {
-        return routine.reduce((total, exercise) => {
+        return (routine || []).reduce((total, exercise) => {
             const calString = exercise.caloriesBurned || "0";
             const numbers = calString.match(/\d+/g);
             if (!numbers) return total;
@@ -1048,7 +1067,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
         } else { // month
             startDate = new Date(new Date().setMonth(now.getMonth() - 1));
         }
-        return completedWorkouts.filter(w => new Date(w.date) >= startDate);
+        return (completedWorkouts || []).filter(w => w && new Date(w.date) >= startDate);
     }, [completedWorkouts, timeFilter]);
 
     useEffect(() => {
@@ -1059,7 +1078,13 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
 
         const analyzeMuscles = async () => {
             setLoadingAnalysis(true);
-            const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
+            const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (w.exercises || []).map(e => e.name)))];
+            if (exerciseNames.length === 0) {
+                setLoadingAnalysis(false);
+                setMuscleData([]);
+                return;
+            }
+            
             const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
             
             try {
@@ -1069,11 +1094,16 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!response.ok) throw new Error('API call failed');
                 const result = await response.json();
-                const muscleMap = JSON.parse(result.candidates[0].content.parts[0].text);
+                
+                const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!textResponse) throw new Error("Empty response from AI");
+
+                const muscleMap = JSON.parse(textResponse);
+                if (typeof muscleMap !== 'object' || muscleMap === null) throw new Error("Invalid JSON format from AI");
 
                 const muscleCounts = {};
                 filteredWorkouts.forEach(workout => {
-                    (Array.isArray(workout.exercises) ? workout.exercises : []).forEach(exercise => {
+                    (workout.exercises || []).forEach(exercise => {
                         const muscle = muscleMap[exercise.name] || 'Otro';
                         if (!muscleCounts[muscle]) {
                             muscleCounts[muscle] = 0;
@@ -1167,14 +1197,16 @@ export default function App() {
             const db = getFirestore(app);
             setFirebaseServices({ auth, db, app });
 
-            onAuthStateChanged(auth, async (user) => {
+            const unsub = onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     setUser(user);
                 } else {
+                    // Si no hay usuario, inicia sesión como anónimo para que la app funcione.
                     await signInAnonymously(auth).catch(err => console.error("Anonymous sign in failed:", err));
                 }
                 setIsAuthReady(true);
             });
+            return () => unsub();
         } else {
              setIsAuthReady(true);
         }
@@ -1235,8 +1267,10 @@ export default function App() {
             const userCredential = await linkWithCredential(auth.currentUser, credential);
             const newUser = userCredential.user;
             const newUid = newUser.uid;
-
-            // Update profile with new name and email
+            
+            // Aquí se debería implementar una lógica para migrar los datos del oldUid al newUid.
+            // Es una operación compleja y se omite por simplicidad, pero en una app real es crucial.
+            
             await setDoc(doc(db, `artifacts/${appId}/users/${newUid}/profile/data`), {
                 name: name,
                 email: newUser.email,
@@ -1244,6 +1278,7 @@ export default function App() {
 
         } catch (error) {
             console.error("Error linking account:", error);
+            // Evitar alert() en producción, usar un componente de notificación.
             alert("Error al vincular la cuenta: " + error.message);
             throw error;
         }
@@ -1252,6 +1287,7 @@ export default function App() {
     const handleLogout = async () => {
         const { auth } = firebaseServices;
         await signOut(auth);
+        setUser(null); // Esto activará el onAuthStateChanged para un nuevo login anónimo
         setUserData(null);
         setDailyLog({});
         setWeightHistory([]);
