@@ -513,8 +513,8 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUp
 
     useEffect(() => {
         if (userData?.goals) setGoals(userData.goals);
-        if (userData?.name) setName(userData.name);
-    }, [userData]);
+        if (userData?.name && !user.isAnonymous) setName(userData.name);
+    }, [userData, user]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
