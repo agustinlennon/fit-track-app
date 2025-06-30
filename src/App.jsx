@@ -12,9 +12,9 @@ function initializeFirebase() {
   try {
     // Reemplaza esto con tu método para obtener la configuración si no usas Vite
     // Por ejemplo, directamente el objeto de configuración.
-    const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+  const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
     if (!firebaseConfigString) {
-      console.error("Firebase config not found. Please set it up in your environment.");
+      console.error("Firebase config not found in environment variables.");
       return null;
     }
     const firebaseConfig = JSON.parse(firebaseConfigString);
