@@ -2,15 +2,19 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles } from 'lucide-react';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit } from 'lucide-react';
 
-// Esta función ahora inicializa Firebase de forma segura.
+// --- INICIALIZACIÓN DE FIREBASE ---
+// Esta función inicializa Firebase de forma segura.
+// NOTA: Para que la app funcione, debes configurar tus variables de entorno.
 function initializeFirebase() {
   try {
-    const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
+    // Reemplaza esto con tu método para obtener la configuración si no usas Vite
+    // Por ejemplo, directamente el objeto de configuración.
+    const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
     if (!firebaseConfigString) {
-      console.error("Firebase config not found in environment variables.");
+      console.error("Firebase config not found. Please set it up in your environment.");
       return null;
     }
     const firebaseConfig = JSON.parse(firebaseConfigString);
@@ -26,7 +30,7 @@ const firebaseData = initializeFirebase();
 const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
 
 
-// --- COMPONENTES DE LA UI ---
+// --- COMPONENTES DE UI REUTILIZABLES ---
 
 const Card = ({ children, className = '' }) => (
   <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-md transition-all duration-300 ${className}`}>
@@ -78,18 +82,19 @@ const DashboardSkeleton = () => (
     </div>
 );
 
+
+// --- VISTAS PRINCIPALES DE LA APLICACIÓN ---
+
 const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }) => {
   if (!userData) {
     return <DashboardSkeleton />;
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  // **FIX:** Ensure todaysLog always has a `loggedFoods` array to prevent crash.
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false, workout: '' };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
 
   const totals = useMemo(() => {
-    // This reduce is now safe because `todaysLog.loggedFoods` is guaranteed to be an array.
     return todaysLog.loggedFoods.reduce((acc, food) => {
       acc.calories += food.calories;
       acc.protein += food.protein;
@@ -100,7 +105,6 @@ const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }
   }, [todaysLog.loggedFoods]);
 
   const goals = userData.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 };
-
   const getProgress = (current, goal) => (goal > 0 ? (current / goal) * 100 : 0);
 
   const MacroProgress = ({ label, current, goal, color }) => (
@@ -189,6 +193,7 @@ const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }
   );
 };
 
+// ... (FoodLogger, AddFoodModal, ProgressTracker, HabitsTracker, FoodDatabaseManager, AppSettings no han cambiado, se omiten por brevedad pero están en el código completo)
 const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => {
     const today = new Date().toISOString().slice(0, 10);
     const todaysLog = { loggedFoods: [], ...(dailyLog[today] || {}) };
@@ -242,10 +247,10 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (foodDatabase.length > 0) {
+        if (foodDatabase.length > 0 && !selectedFoodId) {
             setSelectedFoodId(foodDatabase[0].id);
         }
-    }, [foodDatabase]);
+    }, [foodDatabase, selectedFoodId]);
 
     const filteredFoodDatabase = useMemo(() => foodDatabase.filter(food => food.name.toLowerCase().includes(searchTerm.toLowerCase())), [foodDatabase, searchTerm]);
 
@@ -287,36 +292,6 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
                 </div>
             </form>
         </Modal>
-    );
-};
-
-const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleGoBack }) => {
-    if (!userData) { return <Card><p>Cargando plan...</p></Card>; }
-
-    const days = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
-    const workoutOptions = ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'];
-    const currentSchedule = userData.workoutSchedule || {};
-    const handleChange = (day, value) => handleUpdateSchedule({ ...currentSchedule, [day]: value });
-
-    return (
-        <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Plan Semanal</h2>
-                <Button onClick={handleGoBack} variant="secondary">Volver</Button>
-            </div>
-            <Card>
-                <div className="space-y-4">
-                    {days.map(day => (
-                        <div key={day} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <span className="capitalize font-semibold text-gray-700 dark:text-gray-200">{day}</span>
-                            <select value={currentSchedule[day] || 'Descanso'} onChange={(e) => handleChange(day, e.target.value)} className="p-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg text-sm">
-                                {workoutOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                            </select>
-                        </div>
-                    ))}
-                </div>
-            </Card>
-        </div>
     );
 };
 
@@ -440,10 +415,117 @@ const AppSettings = ({ userData, handleUpdateGoals, handleGoBack }) => {
     );
 };
 
+// --- [NUEVO] WORKOUT PLANNER MEJORADO ---
+const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOptions, handleGoBack }) => {
+    if (!userData) { return <Card><p>Cargando plan...</p></Card>; }
+
+    const days = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+    const [schedule, setSchedule] = useState(userData.workoutSchedule || {});
+    const [workoutOptions, setWorkoutOptions] = useState(userData.workoutOptions || []);
+    const [newOption, setNewOption] = useState('');
+
+    const handleScheduleChange = (day, index, field, value) => {
+        const newSchedule = { ...schedule };
+        newSchedule[day][index][field] = value;
+        setSchedule(newSchedule);
+    };
+    
+    const addWorkoutToDay = (day) => {
+        const newSchedule = { ...schedule };
+        if (!newSchedule[day]) newSchedule[day] = [];
+        newSchedule[day].push({ time: '12:00', name: 'Descanso' });
+        setSchedule(newSchedule);
+    };
+
+    const removeWorkoutFromDay = (day, index) => {
+        const newSchedule = { ...schedule };
+        newSchedule[day].splice(index, 1);
+        setSchedule(newSchedule);
+    };
+
+    const handleAddNewOption = () => {
+        if (newOption && !workoutOptions.includes(newOption)) {
+            const newOptionsList = [...workoutOptions, newOption];
+            setWorkoutOptions(newOptionsList);
+            handleUpdateWorkoutOptions(newOptionsList);
+            setNewOption('');
+        }
+    };
+
+    const handleSaveChanges = () => {
+        handleUpdateSchedule(schedule);
+        alert("¡Plan semanal guardado!");
+    };
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Plan Semanal</h2>
+                <Button onClick={handleGoBack} variant="secondary">Volver</Button>
+            </div>
+            
+            <Card className="mb-6">
+                <h3 className="font-bold text-lg mb-3">Mis Tipos de Ejercicio</h3>
+                <div className="flex gap-2 mb-4">
+                    <input 
+                        value={newOption} 
+                        onChange={e => setNewOption(e.target.value)} 
+                        placeholder="Ej: Yoga, Crossfit" 
+                        className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded"
+                    />
+                    <Button onClick={handleAddNewOption}><PlusCircle size={18}/></Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {workoutOptions.map(opt => <span key={opt} className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">{opt}</span>)}
+                </div>
+            </Card>
+
+            <div className="space-y-4">
+                {days.map(day => (
+                    <Card key={day}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="capitalize font-bold text-xl text-gray-700 dark:text-gray-200">{day}</h3>
+                             <Button onClick={() => addWorkoutToDay(day)} variant="secondary" className="px-3 py-1 text-sm"><PlusCircle size={16}/> Añadir Sesión</Button>
+                        </div>
+                        <div className="space-y-3">
+                           {(schedule[day] || []).length === 0 && <p className="text-sm text-gray-400 dark:text-gray-500 italic">Día de descanso.</p>}
+                           {(schedule[day] || []).map((workout, index) => (
+                                <div key={index} className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-3 items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <input 
+                                        type="time" 
+                                        value={workout.time} 
+                                        onChange={(e) => handleScheduleChange(day, index, 'time', e.target.value)} 
+                                        className="p-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg text-sm"
+                                    />
+                                    <select 
+                                        value={workout.name} 
+                                        onChange={(e) => handleScheduleChange(day, index, 'name', e.target.value)} 
+                                        className="w-full p-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg text-sm"
+                                    >
+                                        {workoutOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+                                    <button onClick={() => removeWorkoutFromDay(day, index)} className="text-red-500 hover:text-red-700 p-2"><Trash2 size={18}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                ))}
+            </div>
+             <Button onClick={handleSaveChanges} className="w-full mt-6">Guardar Plan Semanal</Button>
+        </div>
+    );
+};
+
+
+// --- [NUEVO] AI WORKOUT GENERATOR MEJORADO ---
 const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
     const [routine, setRoutine] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // NUEVO: Estados para las entradas del usuario
+    const [fatigueLevel, setFatigueLevel] = useState('normal');
+    const [userNotes, setUserNotes] =useState('');
 
     if (!userData) { return <Card><p>Cargando Asistente de Rutinas...</p></Card>; }
 
@@ -452,13 +534,27 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
         setRoutine([]);
         setError('');
 
-        const profile = `Soy un hombre de 41 años, peso 90kg, mido 186cm. Mis objetivos son ganar masa muscular, mejorar la potencia para el fútbol y mantenerme saludable.`;
+        const profile = `Soy una persona con los siguientes datos: ${JSON.stringify(userData.goals)}. Mis objetivos son ganar masa muscular, mejorar la potencia para el fútbol y mantenerme saludable.`;
         const schedule = userData.workoutSchedule;
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-        const todayWorkout = schedule[todayDay] || 'Descanso';
-
-        const prompt = `${profile} Mi plan semanal es: Lunes: ${schedule.lunes}, Martes: ${schedule.martes}, Miércoles: ${schedule.miercoles}, Jueves: ${schedule.jueves}, Viernes: ${schedule.viernes}, Sábado: ${schedule.sabado}, Domingo: ${schedule.domingo}. Hoy es ${todayDay} y me toca: ${todayWorkout}. Genera una rutina detallada para el entrenamiento de hoy. Considera que si es de pesas, entreno en casa con mancuernas de 3kg y 6kg, una barra (sin discos adicionales) y peso corporal, y no tengo banco. Si es natación, dame consejos de enfoque. Si es fútbol, consejos de calentamiento. Si es descanso, una sugerencia de recuperación activa. Para cada ejercicio, proporciona un término de búsqueda en español para encontrar un video tutorial en YouTube.`;
         
+        const todayWorkouts = schedule[todayDay] || [{name: 'Descanso'}];
+        const todayWorkoutText = todayWorkouts.map(w => w.name).join(' y ');
+
+        // NUEVO: Prompt mejorado con las entradas del usuario
+        const prompt = `${profile} 
+            Mi plan semanal es: ${JSON.stringify(schedule)}. 
+            Hoy es ${todayDay} y me toca: ${todayWorkoutText}.
+            Mi nivel de energía/fatiga hoy es: ${fatigueLevel}.
+            Notas adicionales para el entrenador IA: "${userNotes || 'Ninguna'}".
+            
+            Basado en todo esto, genera una rutina detallada para el entrenamiento de hoy.
+            Considera que si es de pesas, entreno en casa con mancuernas, una barra y peso corporal, sin banco.
+            Si es natación, dame consejos de enfoque. Si es fútbol, consejos de calentamiento. Si es descanso, una sugerencia de recuperación activa.
+            Para cada ejercicio, proporciona un término de búsqueda en español para encontrar un video tutorial en YouTube.
+            Si menciono alguna molestia en mis notas, sugiere alternativas o modificaciones.`;
+        
+        // NUEVO: Schema de respuesta mejorado
         const generationConfig = {
             responseMimeType: "application/json",
             responseSchema: {
@@ -473,9 +569,11 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
                                 sets: { type: "STRING", description: "Número de series." },
                                 reps: { type: "STRING", description: "Número de repeticiones." },
                                 weight: { type: "STRING", description: "Peso a utilizar (ej. '6 kg', 'Peso Corporal')." },
-                                videoSearchQuery: { type: "STRING", description: "Término de búsqueda en español para YouTube." }
+                                videoSearchQuery: { type: "STRING", description: "Término de búsqueda en español para YouTube." },
+                                estimatedDuration: { type: "STRING", description: "Duración estimada del ejercicio en minutos (ej. '5 min')." },
+                                difficultyLevel: { type: "STRING", description: "Nivel de dificultad (Fácil, Intermedio, Difícil)." }
                             },
-                             required: ["name", "sets", "reps", "weight", "videoSearchQuery"]
+                             required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel"]
                         }
                     }
                 }
@@ -483,7 +581,13 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
         };
 
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            // Reemplaza esto con tu clave de API si no usas variables de entorno
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
+            if(!apiKey) {
+                setError("La clave API de Gemini no está configurada. Por favor, añádela a tus variables de entorno.");
+                setIsLoading(false);
+                return;
+            }
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig };
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -499,7 +603,8 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
                      setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
                  }
             } else {
-                setError("No se pudo obtener una rutina. La respuesta de la IA estaba vacía.");
+                console.log("Respuesta inesperada de la API:", result);
+                setError("No se pudo obtener una rutina. La respuesta de la IA estaba vacía o en un formato incorrecto.");
             }
         } catch (err) {
             console.error("Error al llamar a la API de Gemini o al procesar la respuesta:", err);
@@ -513,10 +618,30 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
         <div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Generador de Rutina con IA</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
             <Card>
-                <div className="text-center">
-                    <h3 className="font-bold text-lg mb-2">¿Listo para entrenar?</h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-4">Presiona el botón para que la IA genere tu rutina de hoy, basada en tu plan semanal y tu equipamiento.</p>
-                    <Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full max-w-xs mx-auto">
+                <div className="space-y-4">
+                    <h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3>
+                    
+                    <div>
+                        <label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label>
+                        <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded">
+                            <option value="baja">Baja energía</option>
+                            <option value="normal">Normal</option>
+                            <option value="alta">Mucha energía</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
+                        <textarea 
+                            value={userNotes}
+                            onChange={(e) => setUserNotes(e.target.value)}
+                            placeholder="Ej: quiero enfocarme en hombros, tengo una molestia en la muñeca, etc."
+                            className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded"
+                            rows="2"
+                        ></textarea>
+                    </div>
+                    
+                    <Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full">
                         <Sparkles size={18}/>
                         {isLoading ? 'Generando tu rutina...' : 'Generar Rutina de Hoy'}
                     </Button>
@@ -530,11 +655,16 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
                 <div className="mt-6 space-y-4">
                     <h3 className="text-xl font-bold text-center">Tu Rutina de Hoy</h3>
                     {routine.map((exercise, index) => (
-                        <Card key={index} className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <Card key={index} className="flex flex-col sm:flex-row justify-between items-start gap-4">
                             <div className="flex-1">
                                 <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4>
                                 <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{exercise.sets} x {exercise.reps}</span> repeticiones</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Peso: {exercise.weight}</p>
+                                {/* NUEVO: Mostrar duración y dificultad */}
+                                <div className="mt-2 flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
+                                    <span className="flex items-center gap-1"><Clock size={14}/> {exercise.estimatedDuration}</span>
+                                    <span className="flex items-center gap-1"><Dumbbell size={14}/> {exercise.difficultyLevel}</span>
+                                </div>
                             </div>
                             <Button
                                 asLink={true}
@@ -553,6 +683,8 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
     );
 };
 
+
+// --- COMPONENTE PRINCIPAL DE LA APP ---
 export default function App() {
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [firebaseServices, setFirebaseServices] = useState(null);
@@ -573,8 +705,20 @@ export default function App() {
             setFirebaseServices({ auth, db, app });
 
             onAuthStateChanged(auth, async (user) => {
+                let currentToken = null;
+                if (typeof __initial_auth_token !== 'undefined') {
+                    currentToken = __initial_auth_token;
+                }
+                
                 if (user) { 
                     setUserId(user.uid);
+                } else if (currentToken) {
+                    try {
+                        await signInWithCustomToken(auth, currentToken);
+                    } catch(e) {
+                        console.error("Error with custom token, signing in anonymously", e);
+                        await signInAnonymously(auth);
+                    }
                 } else {
                     await signInAnonymously(auth);
                 }
@@ -587,19 +731,36 @@ export default function App() {
 
     const handleAddFoodToDb = useCallback(async (foodData) => {
         if (!firebaseServices || !userId) return;
-        const { db, app } = firebaseServices;
-        await addDoc(collection(db, `artifacts/${app.options.appId}/users/${userId}/foodDatabase`), foodData);
+        const { db } = firebaseServices;
+        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
     }, [firebaseServices, userId]);
 
+    // Listener de datos principal
     useEffect(() => {
         if (isAuthReady && firebaseServices && userId) {
-            const { db, app } = firebaseServices;
-            const appId = app.options.appId;
+            const { db } = firebaseServices;
             const userDocPath = `artifacts/${appId}/users/${userId}`;
             
             const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (doc) => {
-                if(doc.exists()){ setUserData(doc.data()); } 
-                else { setDoc(doc.ref, { goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 }, workoutSchedule: { lunes: 'Natación', martes: 'Pesas - Tren Superior', miercoles: 'Pesas - Tren Inferior', jueves: 'Fútbol', viernes: 'Natación', sabado: 'Descanso', domingo: 'Descanso' } }); }
+                if(doc.exists()){ 
+                    setUserData(doc.data()); 
+                } else { 
+                    // NUEVO: Estructura de datos inicial mejorada
+                    const initialData = {
+                        goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
+                        workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
+                        workoutSchedule: { 
+                            lunes: [{time: '18:00', name: 'Natación'}], 
+                            martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
+                            miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], 
+                            jueves: [{time: '20:00', name: 'Fútbol'}], 
+                            viernes: [{time: '18:00', name: 'Natación'}], 
+                            sabado: [], 
+                            domingo: [] 
+                        }
+                    };
+                    setDoc(doc.ref, initialData); 
+                }
             });
 
             const unsubLogs = onSnapshot(collection(db, `${userDocPath}/dailyLogs`), (snap) => setDailyLog(snap.docs.reduce((acc, doc) => ({...acc, [doc.id]: doc.data() }), {})));
@@ -607,7 +768,7 @@ export default function App() {
             const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => {
                 const foods = snap.docs.map(d => ({ ...d.data(), id: d.id }));
                 setFoodDatabase(foods);
-                if (foods.length === 0) {
+                if (foods.length === 0) { // Precargar base de datos de alimentos si está vacía
                     [{ name: 'Pechuga de Pollo', c: 165, p: 31, h: 0, g: 3.6 }, { name: 'Arroz Blanco Cocido', c: 130, p: 2.7, h: 28, g: 0.3 }, { name: 'Huevo Entero', c: 155, p: 13, h: 1.1, g: 11 }, { name: 'Avena en Hojuelas', c: 389, p: 16.9, h: 66.3, g: 6.9 }].forEach(f => handleAddFoodToDb({name:f.name, calories_per_100g: f.c, protein_per_100g: f.p, carbs_per_100g: f.h, fat_per_100g: f.g}));
                 }
             });
@@ -615,8 +776,10 @@ export default function App() {
         }
     }, [isAuthReady, firebaseServices, userId, handleAddFoodToDb]);
 
+    // Handlers para actualizar datos
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { goals: newGoals }); };
     const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutSchedule: newSchedule }); };
+    const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutOptions: newOptions }); };
     const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !userId) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, userId]);
     const handleAddWeight = async (weight) => { if (!firebaseServices || !userId) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
     const handleDeleteFood = async (foodId) => { if (!firebaseServices || !userId) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/foodDatabase`, foodId)); };
@@ -624,18 +787,14 @@ export default function App() {
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
-    if (!isAuthReady || !firebaseServices) {
-        return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Inicializando...</p></div></div>;
-    }
-    
-    if(!userId) {
-       return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Autenticando...</p></div></div>;
+    if (!isAuthReady || !firebaseServices || !userData) {
+        return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Inicializando FitTrack AI...</p></div></div>;
     }
 
     const renderView = () => {
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
-            case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleGoBack={() => setView('dashboard')} />;
+            case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
             case 'progress': return <ProgressTracker weightHistory={weightHistory} handleAddWeight={handleAddWeight} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings userData={userData} handleUpdateGoals={handleUpdateGoals} handleGoBack={() => setView('dashboard')} />;
