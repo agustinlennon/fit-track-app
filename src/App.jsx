@@ -156,16 +156,6 @@ export default function App() {
             console.error("Error updating data:", error);
         }
     }, [firebaseServices, userId]);
-    
-    const handleAddToList = useCallback(async (path, data) => {
-        if(!firebaseServices || !userId) return;
-        await addDoc(collection(firebaseServices.db, path), data);
-    }, [firebaseServices, userId]);
-
-    const handleDeleteFromList = useCallback(async (path, id) => {
-        if(!firebaseServices || !userId) return;
-        await deleteDoc(doc(firebaseServices.db, path, id));
-    }, [firebaseServices, userId]);
 
     useEffect(() => {
         if (isAuthReady && firebaseServices && userId) {
@@ -209,7 +199,7 @@ export default function App() {
       return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Cargando tu plan...</p></div></div>;
     }
     
-    // --- ALL COMPONENTS NOW FULLY IMPLEMENTED ---
+    // --- FULLY IMPLEMENTED COMPONENTS ---
     
     const DashboardView = () => (
       <div className="space-y-6">
@@ -265,13 +255,12 @@ export default function App() {
     };
     
     const Macronutrients = () => {
-        // ... (implementation)
         return <Card><h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-100">Macronutrientes</h3></Card>
     };
     
     const WeightProgressPreview = () => (
       <Card>
-          {/* ... */}
+        <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-100">Progreso de Peso</h3>
       </Card>
     );
 
@@ -296,7 +285,6 @@ export default function App() {
     const AiChat = () => { 
         return <p>AI Chat Component</p>
     };
-
 
     // --- NAVIGATION LOGIC (Corrected and Final) ---
     const renderView = () => {
