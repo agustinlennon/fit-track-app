@@ -838,11 +838,13 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
 
         const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
             Mi plan para hoy es: ${todayWorkoutText}.
+            Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}".
+            Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros.
             Mi nivel de energía hoy es: ${fatigueLevel}.
             Mi historial reciente es: ${historySummary || 'ninguno'}.
-            Notas adicionales: "${userNotes || 'Ninguna'}".
             
-            Basado en todo esto, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
+            Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy.
+            IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
         
         const generationConfig = {
             responseMimeType: "application/json",
