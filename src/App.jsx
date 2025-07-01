@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit } from 'lucide-react';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler } from 'lucide-react';
 
 // --- INICIALIZACIÓN DE FIREBASE ---
 function initializeFirebase() {
   try {
     const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
     if (!firebaseConfigString) {
-      console.error("Firebase config not found in environment variables.");
+      console.error("Firebase config not found. Please set it up in your environment.");
       return null;
     }
     const firebaseConfig = JSON.parse(firebaseConfigString);
@@ -29,7 +29,7 @@ const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
 // --- COMPONENTES DE UI REUTILIZABLES ---
 
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-md transition-all duration-300 ${className}`}>
+  <div className={`relative bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-md transition-all duration-300 ${className}`}>
     {children}
   </div>
 );
@@ -41,6 +41,7 @@ const Button = ({ children, onClick, className = '', variant = 'primary', disabl
     secondary: 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 focus:ring-gray-500',
     danger: 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-500',
     youtube: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+    success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
   };
   
   if (asLink) {
@@ -81,28 +82,89 @@ const DashboardSkeleton = () => (
 
 // --- VISTAS PRINCIPALES DE LA APLICACIÓN ---
 
-const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }) => {
+const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFood }) => {
+  const [timeFilter, setTimeFilter] = useState('week');
+  const [aiRecommendation, setAiRecommendation] = useState({ text: 'Analizando tu día...', loading: true });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
+  const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
+
+  useEffect(() => {
+    if (!userData || !userData.workoutSchedule) return;
+
+    const getAiRecommendation = async () => {
+      setAiRecommendation({ text: 'Analizando tu día...', loading: true });
+      const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+      const todayWorkouts = userData.workoutSchedule[todayDay] || [];
+      const workoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(', ') : 'Descanso';
+
+      if (workoutText === 'Descanso') {
+        setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
+        return;
+      }
+      
+      const prompt = `Basado en el siguiente entrenamiento de hoy: "${workoutText}" y mis objetivos nutricionales de ${JSON.stringify(userData.goals)}, calcula una recomendación de ingesta de proteína para hoy y sugiere una comida post-entrenamiento simple y efectiva. Responde en español y de forma concisa.`;
+
+      try {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error('API call failed');
+        const result = await response.json();
+        const recommendationText = result.candidates[0].content.parts[0].text;
+        setAiRecommendation({ text: recommendationText, loading: false });
+      } catch (error) {
+        console.error("Error fetching AI recommendation:", error);
+        setAiRecommendation({ text: 'No se pudo obtener la recomendación. Intenta más tarde.', loading: false });
+      }
+    };
+
+    getAiRecommendation();
+  }, [userData]);
+
+  const workoutSummary = useMemo(() => {
+    const now = new Date();
+    let startDate;
+
+    if (timeFilter === 'week') {
+      startDate = new Date(new Date().setDate(now.getDate() - 7));
+    } else if (timeFilter === 'month') {
+      startDate = new Date(new Date().setMonth(now.getMonth() - 1));
+    } else { 
+      startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
+    }
+
+    const filteredWorkouts = completedWorkouts.filter(w => new Date(w.date) >= startDate);
+    
+    const totalWorkouts = filteredWorkouts.length;
+    const totalSets = filteredWorkouts.reduce((acc, w) => acc + w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0), 0);
+    const totalReps = filteredWorkouts.reduce((acc, w) => acc + w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0), 0);
+
+    return { totalWorkouts, totalSets, totalReps };
+  }, [completedWorkouts, timeFilter]);
+
   if (!userData) {
     return <DashboardSkeleton />;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false, workout: '' };
-  const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
+  const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+  const todaysPlan = userData.workoutSchedule ? (userData.workoutSchedule[todayDay] || []) : [];
 
   const totals = useMemo(() => {
-    return todaysLog.loggedFoods.reduce((acc, food) => {
-      acc.calories += food.calories;
-      acc.protein += food.protein;
-      acc.carbs += food.carbs;
-      acc.fat += food.fat;
+    return (todaysLog.loggedFoods || []).reduce((acc, food) => {
+      acc.calories += food.calories || 0;
+      acc.protein += food.protein || 0;
+      acc.carbs += food.carbs || 0;
+      acc.fat += food.fat || 0;
       return acc;
     }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
   }, [todaysLog.loggedFoods]);
 
   const goals = userData.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 };
   const getProgress = (current, goal) => (goal > 0 ? (current / goal) * 100 : 0);
-
+  
   const MacroProgress = ({ label, current, goal, color }) => (
     <div>
       <div className="flex justify-between items-baseline mb-1">
@@ -114,27 +176,45 @@ const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }
       </div>
     </div>
   );
-  
-  const getMotivationalMessage = () => {
-      const remainingProtein = goals.protein - totals.protein;
-      const remainingCarbs = goals.carbs - totals.carbs;
-
-      if (remainingProtein > 40) return { message: `¡Aún te faltan ${Math.round(remainingProtein)}g de proteína! Un batido o pollo podría ayudar.`, icon: <Flame className="text-orange-400" /> };
-      if (remainingCarbs > 90) return { message: `¡Necesitas energía! Te faltan ${Math.round(remainingCarbs)}g de carbohidratos. ¿Qué tal avena o arroz?`, icon: <Dumbbell className="text-blue-400" /> };
-      if (totals.calories > 0 && totals.calories < goals.calories / 2) return { message: '¡Buen comienzo! Sigue registrando para alcanzar tus metas de hoy.', icon: <CheckCircle className="text-green-400" /> };
-      return { message: '¡Listo para romperla! Registra tu primera comida o entrenamiento.', icon: <Utensils className="text-gray-400" /> };
-  };
-
-  const motivationalMessage = getMotivationalMessage();
 
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-1">Resumen de Hoy</h2>
-        <p className="text-gray-500 dark:text-gray-400 mb-4">{new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-        <div className="flex items-center gap-3 p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-            {motivationalMessage.icon}
-            <p className="text-sm text-gray-700 dark:text-gray-300">{motivationalMessage.message}</p>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Plan de Hoy: {new Date().toLocaleDateString('es-ES', { weekday: 'long' })}</h2>
+        <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+          <h3 className="font-semibold text-gray-700 dark:text-gray-200">Entrenamiento programado:</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+            {todaysPlan.length > 0 ? todaysPlan.map(p => `${p.name} a las ${p.time}`).join(' / ') : 'Día de descanso'}
+          </p>
+          <h3 className="font-semibold text-gray-700 dark:text-gray-200">Recomendación de la IA:</h3>
+          <p className={`text-sm text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
+            {aiRecommendation.text}
+          </p>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Resumen de Actividad</h3>
+            <div className="flex gap-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
+                <button onClick={() => setTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
+                <button onClick={() => setTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
+                <button onClick={() => setTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
+            </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalWorkouts}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Entrenos</p>
+            </div>
+            <div>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalSets}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Series</p>
+            </div>
+            <div>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalReps}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Reps</p>
+            </div>
         </div>
       </Card>
       
@@ -161,30 +241,6 @@ const Dashboard = ({ userData, dailyLog, weightHistory, setView, handleLogFood }
             <PlusCircle size={18}/> Registrar Comida
         </Button>
       </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-white">Progreso de Peso</h3>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weightHistory} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
-                  <XAxis dataKey="date" fontSize={12} />
-                  <YAxis domain={['dataMin - 2', 'dataMax + 2']} fontSize={12} />
-                  <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
-                  <Line type="monotone" dataKey="weight" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }}/>
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <Button onClick={() => setView('progress')} className="w-full mt-4" variant="secondary">
-              Ver todo el progreso
-            </Button>
-        </Card>
-        <Card>
-           <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-white">Hábitos Diarios</h3>
-           <HabitsTracker dailyLog={todaysLog} handleUpdateHabit={(habit, value) => handleLogFood(today, { [habit]: value }, true)} />
-        </Card>
-      </div>
     </div>
   );
 };
@@ -201,7 +257,7 @@ const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => 
     };
 
     const meals = { desayuno: 'Desayuno', almuerzo: 'Almuerzo', cena: 'Cena', snacks: 'Snacks' };
-    const getFoodsForMeal = (meal) => todaysLog.loggedFoods.filter(f => f.meal === meal);
+    const getFoodsForMeal = (meal) => (todaysLog.loggedFoods || []).filter(f => f.meal === meal);
     const removeFood = (foodToRemove) => handleLogFood(today, { loggedFoods: arrayRemove(foodToRemove) }, true);
 
     return (
@@ -247,7 +303,7 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
         }
     }, [foodDatabase, selectedFoodId]);
 
-    const filteredFoodDatabase = useMemo(() => foodDatabase.filter(food => food.name.toLowerCase().includes(searchTerm.toLowerCase())), [foodDatabase, searchTerm]);
+    const filteredFoodDatabase = useMemo(() => (foodDatabase || []).filter(food => food.name.toLowerCase().includes(searchTerm.toLowerCase())), [foodDatabase, searchTerm]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -256,8 +312,8 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
             const ratio = quantity / 100;
             const logEntry = {
                 foodId: foodData.id, foodName: foodData.name, quantity: Number(quantity), meal: mealType,
-                calories: foodData.calories_per_100g * ratio, protein: foodData.protein_per_100g * ratio,
-                carbs: foodData.carbs_per_100g * ratio, fat: foodData.fat_per_100g * ratio,
+                calories: (foodData.calories_per_100g || 0) * ratio, protein: (foodData.protein_per_100g || 0) * ratio,
+                carbs: (foodData.carbs_per_100g || 0) * ratio, fat: (foodData.fat_per_100g || 0) * ratio,
             };
             handleLogFood(today, { loggedFoods: arrayUnion(logEntry) }, true);
             setQuantity(100); setSearchTerm(''); onClose();
@@ -290,9 +346,52 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
     );
 };
 
-const ProgressTracker = ({ weightHistory, handleAddWeight, handleGoBack }) => {
+const ProgressTracker = ({ weightHistory, bodyMeasurements, handleAddWeight, handleAddMeasurements, handleGoBack }) => {
     const [newWeight, setNewWeight] = useState('');
-    const onAddWeight = () => { if (newWeight && !isNaN(newWeight)) { handleAddWeight(parseFloat(newWeight)); setNewWeight(''); } };
+    const [newMeasurements, setNewMeasurements] = useState({
+        arms: '', forearms: '', back: '', core: '', quads: '', calves: ''
+    });
+    const [chartView, setChartView] = useState('weight');
+
+    const measurementLabels = {
+        weight: 'Peso Corporal (kg)', arms: 'Brazos (cm)', forearms: 'Antebrazos (cm)',
+        back: 'Espalda (cm)', core: 'Core (cm)', quads: 'Cuádriceps (cm)', calves: 'Pantorrillas (cm)'
+    };
+
+    const chartData = useMemo(() => {
+        if (chartView === 'weight') {
+            return weightHistory;
+        }
+        return bodyMeasurements.map(m => ({
+            date: m.date,
+            [chartView]: m[chartView]
+        })).filter(item => item[chartView] !== undefined);
+    }, [chartView, weightHistory, bodyMeasurements]);
+
+    const onAddWeight = () => {
+        if (newWeight && !isNaN(newWeight)) {
+            handleAddWeight(parseFloat(newWeight));
+            setNewWeight('');
+        }
+    };
+
+    const handleMeasurementChange = (e) => {
+        setNewMeasurements({ ...newMeasurements, [e.target.name]: e.target.value });
+    };
+
+    const onAddMeasurements = () => {
+        const measurementsWithNumbers = Object.entries(newMeasurements).reduce((acc, [key, value]) => {
+            if (value && !isNaN(value)) {
+                acc[key] = parseFloat(value);
+            }
+            return acc;
+        }, {});
+
+        if (Object.keys(measurementsWithNumbers).length > 0) {
+            handleAddMeasurements(measurementsWithNumbers);
+            setNewMeasurements({ arms: '', forearms: '', back: '', core: '', quads: '', calves: '' });
+        }
+    };
 
     return (
       <div>
@@ -301,27 +400,45 @@ const ProgressTracker = ({ weightHistory, handleAddWeight, handleGoBack }) => {
           <Button onClick={handleGoBack} variant="secondary">Volver</Button>
         </div>
         <Card className="mb-6">
-          <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-white">Evolución del Peso Corporal</h3>
+            <div className="flex justify-between items-center mb-4">
+                 <h3 className="font-bold text-xl text-gray-800 dark:text-white">Evolución Corporal</h3>
+                 <select value={chartView} onChange={(e) => setChartView(e.target.value)} className="p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg">
+                    {Object.entries(measurementLabels).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                    ))}
+                 </select>
+            </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weightHistory} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+              <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
                   <XAxis dataKey="date" fontSize={12} />
-                  <YAxis domain={['dataMin - 5', 'dataMax + 5']} fontSize={12}/>
+                  <YAxis domain={['dataMin - 2', 'dataMax + 2']} fontSize={12}/>
                   <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
                   <Legend />
-                  <Line type="monotone" dataKey="weight" name="Peso (kg)" stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey={chartView} name={measurementLabels[chartView]} stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 8 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
-        <Card>
-           <h3 className="font-bold text-lg mb-3 text-gray-800 dark:text-white">Registrar Nuevo Peso</h3>
-           <div className="flex gap-4">
-             <input type="number" step="0.1" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="Ej: 85.5" className="w-full p-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" />
-             <Button onClick={onAddWeight}>Registrar</Button>
-           </div>
-        </Card>
+        <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+               <h3 className="font-bold text-lg mb-3 text-gray-800 dark:text-white">Registrar Nuevo Peso</h3>
+               <div className="flex gap-4">
+                 <input type="number" step="0.1" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="Ej: 85.5" className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" />
+                 <Button onClick={onAddWeight}>Registrar</Button>
+               </div>
+            </Card>
+            <Card>
+               <h3 className="font-bold text-lg mb-3 text-gray-800 dark:text-white">Registrar Nuevas Medidas (cm)</h3>
+               <div className="grid grid-cols-2 gap-3">
+                    {Object.keys(newMeasurements).map(key => (
+                        <input key={key} type="number" name={key} value={newMeasurements[key]} onChange={handleMeasurementChange} placeholder={key.charAt(0).toUpperCase() + key.slice(1)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" />
+                    ))}
+               </div>
+               <Button onClick={onAddMeasurements} className="w-full mt-4">Registrar Medidas</Button>
+            </Card>
+        </div>
       </div>
     );
 };
@@ -380,7 +497,7 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
             </Card>
             <Card>
                  <h3 className="font-bold text-lg mb-3">Alimentos Guardados</h3>
-                 <ul className="space-y-2 max-h-96 overflow-y-auto">{foodDatabase.map(food => (<li key={food.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md"><span>{food.name}</span><button onClick={() => handleDeleteFood(food.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18} /></button></li>))}</ul>
+                 <ul className="space-y-2 max-h-96 overflow-y-auto">{(foodDatabase || []).map(food => (<li key={food.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md"><span>{food.name}</span><button onClick={() => handleDeleteFood(food.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18} /></button></li>))}</ul>
             </Card>
         </div>
     );
@@ -391,7 +508,7 @@ const AppSettings = ({ userData, handleUpdateGoals, handleGoBack }) => {
 
     const [goals, setGoals] = useState(userData.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
     const handleChange = (e) => setGoals({ ...goals, [e.target.name]: parseFloat(e.target.value) });
-    const handleSubmit = (e) => { e.preventDefault(); handleUpdateGoals(goals); alert("¡Objetivos actualizados!"); };
+    const handleSubmit = (e) => { e.preventDefault(); handleUpdateGoals(goals); };
     
     return (
         <div>
@@ -410,7 +527,6 @@ const AppSettings = ({ userData, handleUpdateGoals, handleGoBack }) => {
     );
 };
 
-// --- WORKOUT PLANNER CORREGIDO ---
 const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOptions, handleGoBack }) => {
     if (!userData) { return <Card><p>Cargando plan...</p></Card>; }
 
@@ -420,13 +536,15 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
     const [newOption, setNewOption] = useState('');
 
     const handleScheduleChange = (day, index, field, value) => {
-        const newSchedule = JSON.parse(JSON.stringify(schedule)); // Deep copy
-        newSchedule[day][index][field] = value;
-        setSchedule(newSchedule);
+        const newSchedule = JSON.parse(JSON.stringify(schedule));
+        if(newSchedule[day] && newSchedule[day][index]) {
+            newSchedule[day][index][field] = value;
+            setSchedule(newSchedule);
+        }
     };
     
     const addWorkoutToDay = (day) => {
-        const newSchedule = JSON.parse(JSON.stringify(schedule)); // Deep copy
+        const newSchedule = JSON.parse(JSON.stringify(schedule));
         if (!newSchedule[day] || !Array.isArray(newSchedule[day])) {
             newSchedule[day] = [];
         }
@@ -435,7 +553,7 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
     };
 
     const removeWorkoutFromDay = (day, index) => {
-        const newSchedule = JSON.parse(JSON.stringify(schedule)); // Deep copy
+        const newSchedule = JSON.parse(JSON.stringify(schedule));
         if (newSchedule[day] && Array.isArray(newSchedule[day])) {
            newSchedule[day].splice(index, 1);
            setSchedule(newSchedule);
@@ -453,8 +571,6 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
 
     const handleSaveChanges = () => {
         handleUpdateSchedule(schedule);
-        // Using a custom modal/toast in a real app would be better than alert
-        alert("¡Plan semanal guardado!"); 
     };
 
     return (
@@ -476,7 +592,7 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
                     <Button onClick={handleAddNewOption}><PlusCircle size={18}/></Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    {workoutOptions.map(opt => <span key={opt} className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">{opt}</span>)}
+                    {(workoutOptions || []).map(opt => <span key={opt} className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">{opt}</span>)}
                 </div>
             </Card>
 
@@ -488,7 +604,6 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
                              <Button onClick={() => addWorkoutToDay(day)} variant="secondary" className="px-3 py-1 text-sm"><PlusCircle size={16}/> Añadir Sesión</Button>
                         </div>
                         <div className="space-y-3">
-                           {/* CORRECCIÓN: Asegurarse de que `schedule[day]` es un array antes de llamar a .map() */}
                            {(!schedule[day] || !Array.isArray(schedule[day]) || schedule[day].length === 0) && <p className="text-sm text-gray-400 dark:text-gray-500 italic">Día de descanso.</p>}
                            {Array.isArray(schedule[day]) && schedule[day].map((workout, index) => (
                                 <div key={index} className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-3 items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -503,7 +618,7 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
                                         onChange={(e) => handleScheduleChange(day, index, 'name', e.target.value)} 
                                         className="w-full p-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg text-sm"
                                     >
-                                        {workoutOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                        {(workoutOptions || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
                                     <button onClick={() => removeWorkoutFromDay(day, index)} className="text-red-500 hover:text-red-700 p-2"><Trash2 size={18}/></button>
                                 </div>
@@ -517,17 +632,104 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
     );
 };
 
+const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
+    const [seconds, setSeconds] = useState(initialSeconds);
+    const [isActive, setIsActive] = useState(false);
+    const [inputSeconds, setInputSeconds] = useState(initialSeconds);
+    const timerRef = useRef(null);
 
-// --- AI WORKOUT GENERATOR CORREGIDO ---
-const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
-    const [routine, setRoutine] = useState([]);
+    useEffect(() => {
+        setSeconds(initialSeconds);
+        setInputSeconds(initialSeconds);
+    }, [initialSeconds]);
+
+    useEffect(() => {
+        if (isActive) {
+            timerRef.current = setInterval(() => {
+                if (direction === 'down') {
+                    setSeconds(prev => {
+                        if (prev > 0) {
+                            return prev - 1;
+                        } else {
+                            clearInterval(timerRef.current);
+                            setIsActive(false);
+                            return 0;
+                        }
+                    });
+                } else {
+                    setSeconds(prev => prev + 1);
+                }
+            }, 1000);
+        } else {
+            clearInterval(timerRef.current);
+        }
+        return () => clearInterval(timerRef.current);
+    }, [isActive, direction]);
+
+    const toggleTimer = () => setIsActive(!isActive);
+    const resetTimer = () => {
+        setIsActive(false);
+        setSeconds(initialSeconds);
+    };
+    
+    const handleTimeChange = (e) => {
+        const value = parseInt(e.target.value, 10);
+        setInputSeconds(isNaN(value) ? 0 : value);
+    };
+    
+    const handleSetTime = () => {
+        if(onTimeSet) {
+            onTimeSet(inputSeconds);
+        }
+    };
+
+    const formatTime = (timeInSeconds) => {
+        const mins = Math.floor(timeInSeconds / 60).toString().padStart(2, '0');
+        const secs = (timeInSeconds % 60).toString().padStart(2, '0');
+        return `${mins}:${secs}`;
+    };
+
+    const isFinished = direction === 'down' && seconds === 0 && !isActive;
+
+    return (
+        <div className={`p-4 rounded-lg text-center transition-colors duration-300 ${isFinished ? 'bg-green-100 dark:bg-green-900/50' : 'bg-gray-100 dark:bg-gray-700/50'}`}>
+            <div className="flex justify-center items-center gap-4 mb-2">
+                 <h4 className="font-semibold text-gray-700 dark:text-gray-300">{title}</h4>
+                 {direction === 'down' && (
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            value={inputSeconds}
+                            onChange={handleTimeChange}
+                            className="w-20 p-1 text-center bg-white dark:bg-gray-600 border rounded-md"
+                        />
+                        <Button onClick={handleSetTime} variant="secondary" className="px-2 py-1 text-xs">Set</Button>
+                    </div>
+                 )}
+            </div>
+            <p className="font-mono text-5xl font-bold my-2 text-gray-900 dark:text-white">{formatTime(seconds)}</p>
+            <div className="flex justify-center gap-3">
+                <Button onClick={toggleTimer} variant="primary" className="w-28">
+                    {isActive ? <Pause size={18} /> : <Play size={18} />}
+                    {isActive ? 'Pausar' : 'Iniciar'}
+                </Button>
+                <Button onClick={resetTimer} variant="secondary">
+                    <RotateCcw size={18} />
+                    Reset
+                </Button>
+            </div>
+             {isFinished && <p className="text-green-600 dark:text-green-400 font-semibold mt-2 animate-pulse">¡A entrenar!</p>}
+        </div>
+    );
+};
+
+const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, routine, setRoutine }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-
     const [fatigueLevel, setFatigueLevel] = useState('normal');
-    const [userNotes, setUserNotes] =useState('');
-
-    if (!userData) { return <Card><p>Cargando Asistente de Rutinas...</p></Card>; }
+    const [userNotes, setUserNotes] = useState('');
+    const [restTime, setRestTime] = useState(90);
+    const [recalculatingIndex, setRecalculatingIndex] = useState(null);
 
     const getWorkoutSuggestion = async () => {
         setIsLoading(true);
@@ -537,8 +739,6 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
         const profile = `Soy una persona con los siguientes datos: ${JSON.stringify(userData.goals)}. Mis objetivos son ganar masa muscular y mantenerme saludable.`;
         const schedule = userData.workoutSchedule || {};
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-        
-        // CORRECCIÓN: Asegurar que `todayWorkouts` es un array
         const todayWorkouts = Array.isArray(schedule[todayDay]) ? schedule[todayDay] : [{name: 'Descanso'}];
         const todayWorkoutText = todayWorkouts.map(w => w.name).join(' y ');
 
@@ -549,10 +749,7 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
             Notas adicionales para el entrenador IA: "${userNotes || 'Ninguna'}".
             
             Basado en todo esto, genera una rutina detallada para el entrenamiento de hoy.
-            Considera que si es de pesas, entreno en casa con mancuernas, una barra y peso corporal, sin banco.
-            Si es natación, dame consejos de enfoque. Si es fútbol, consejos de calentamiento. Si es descanso, una sugerencia de recuperación activa.
-            Para cada ejercicio, proporciona un término de búsqueda en español para encontrar un video tutorial en YouTube.
-            Si menciono alguna molestia en mis notas, sugiere alternativas o modificaciones.`;
+            Para cada ejercicio, proporciona un término de búsqueda en español para encontrar un video en YouTube, sugiere un tipo de equipamiento y estima las calorías quemadas (caloriesBurned).`;
         
         const generationConfig = {
             responseMimeType: "application/json",
@@ -564,15 +761,12 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
                         items: {
                             type: "OBJECT",
                             properties: {
-                                name: { type: "STRING", description: "Nombre del ejercicio." },
-                                sets: { type: "STRING", description: "Número de series." },
-                                reps: { type: "STRING", description: "Número de repeticiones." },
-                                weight: { type: "STRING", description: "Peso a utilizar (ej. '6 kg', 'Peso Corporal')." },
-                                videoSearchQuery: { type: "STRING", description: "Término de búsqueda en español para YouTube." },
-                                estimatedDuration: { type: "STRING", description: "Duración estimada del ejercicio en minutos (ej. '5 min')." },
-                                difficultyLevel: { type: "STRING", description: "Nivel de dificultad (Fácil, Intermedio, Difícil)." }
+                                name: { type: "STRING" }, sets: { type: "STRING" }, reps: { type: "STRING" },
+                                weight: { type: "STRING" }, videoSearchQuery: { type: "STRING" },
+                                estimatedDuration: { type: "STRING" }, difficultyLevel: { type: "STRING" },
+                                equipment: { type: "STRING" }, caloriesBurned: { type: "STRING" }
                             },
-                             required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel"]
+                             required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel", "equipment", "caloriesBurned"]
                         }
                     }
                 }
@@ -580,11 +774,9 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
         };
 
         try {
-            // CORRECCIÓN: Usar la clave API proporcionada por el entorno
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // Dejar vacío para que el entorno lo complete
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig };
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-            
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             
             if (!response.ok) throw new Error(`API call failed: ${response.status} ${response.statusText}`);
@@ -593,55 +785,119 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
 
             if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
                 const parsedJson = JSON.parse(result.candidates[0].content.parts[0].text);
-                setRoutine(parsedJson.routine || []);
+                const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
+                setRoutine(editableRoutine);
                  if (!parsedJson.routine || parsedJson.routine.length === 0) {
                      setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
                  }
             } else {
-                console.log("Unexpected API response:", result);
                 setError("No se pudo obtener una rutina. La respuesta de la IA estaba vacía o en un formato incorrecto.");
             }
         } catch (err) {
-            console.error("Error calling Gemini API or processing response:", err);
-            setError(`Ocurrió un error al contactar al asistente de IA. Por favor, revisa la consola para más detalles. Error: ${err.message}`);
+            setError(`Ocurrió un error al contactar al asistente de IA. Error: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
     };
     
+    const handleRecalculateCalories = async (exerciseIndex) => {
+        setRecalculatingIndex(exerciseIndex);
+        const exercise = routine[exerciseIndex];
+        const prompt = `Por favor, recalcula las calorías quemadas para el siguiente ejercicio basado en los nuevos datos:
+        - Ejercicio: ${exercise.name}
+        - Series: ${exercise.sets}
+        - Repeticiones: ${exercise.reps}
+        - Peso: ${exercise.weight}
+        Responde únicamente con el nuevo valor de calorías quemadas (ej: "60-80 kcal").`;
+
+        try {
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) throw new Error('API call failed');
+            const result = await response.json();
+            const newCalories = result.candidates[0].content.parts[0].text.trim();
+            
+            const updatedRoutine = [...routine];
+            updatedRoutine[exerciseIndex].caloriesBurned = newCalories;
+            setRoutine(updatedRoutine);
+
+        } catch (error) {
+            console.error("Error recalculating calories:", error);
+            // Opcional: mostrar un error al usuario
+        } finally {
+            setRecalculatingIndex(null);
+        }
+    };
+
+    const handleExerciseUpdate = (index, field, value) => {
+        const updatedRoutine = [...routine];
+        updatedRoutine[index][field] = value;
+        setRoutine(updatedRoutine);
+    };
+
+    const handleToggleComplete = (index) => {
+        const updatedRoutine = [...routine];
+        updatedRoutine[index].completed = !updatedRoutine[index].completed;
+        setRoutine(updatedRoutine);
+    };
+
+    const handleDeleteExercise = (indexToDelete) => {
+        const updatedRoutine = routine.filter((_, index) => index !== indexToDelete);
+        setRoutine(updatedRoutine);
+    };
+
+    const handleFinishAndSave = () => {
+        handleSaveWorkout(routine);
+        setRoutine([]);
+        handleGoBack();
+    };
+
+    const totalCaloriesBurned = useMemo(() => {
+        return routine.reduce((total, exercise) => {
+            const calString = exercise.caloriesBurned || "0";
+            const numbers = calString.match(/\d+/g);
+            if (!numbers) return total;
+            
+            if (numbers.length > 1) {
+                return total + (parseInt(numbers[0], 10) + parseInt(numbers[1], 10)) / 2;
+            } else if (numbers.length === 1) {
+                return total + parseInt(numbers[0], 10);
+            }
+            return total;
+        }, 0);
+    }, [routine]);
+
+    const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Generador de Rutina con IA</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
-            <Card>
-                <div className="space-y-4">
-                    <h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3>
-                    
-                    <div>
-                        <label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label>
-                        <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded">
-                            <option value="baja">Baja energía</option>
-                            <option value="normal">Normal</option>
-                            <option value="alta">Mucha energía</option>
-                        </select>
+            
+            {routine.length === 0 && (
+                <Card>
+                    <div className="space-y-4">
+                        <h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label>
+                            <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded">
+                                <option value="baja">Baja energía</option>
+                                <option value="normal">Normal</option>
+                                <option value="alta">Mucha energía</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
+                            <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded" rows="2"></textarea>
+                        </div>
+                        <Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full">
+                            <Sparkles size={18}/>
+                            {isLoading ? 'Generando tu rutina...' : 'Generar Rutina de Hoy'}
+                        </Button>
                     </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
-                        <textarea 
-                            value={userNotes}
-                            onChange={(e) => setUserNotes(e.target.value)}
-                            placeholder="Ej: quiero enfocarme en hombros, tengo una molestia en la muñeca, etc."
-                            className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded"
-                            rows="2"
-                        ></textarea>
-                    </div>
-                    
-                    <Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full">
-                        <Sparkles size={18}/>
-                        {isLoading ? 'Generando tu rutina...' : 'Generar Rutina de Hoy'}
-                    </Button>
-                </div>
-            </Card>
+                </Card>
+            )}
 
             {isLoading && <div className="mt-6 text-center p-4"><p className="animate-pulse text-lg">El entrenador IA está preparando tu sesión...</p></div>}
             {error && <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg">{error}</div>}
@@ -649,28 +905,80 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack }) => {
             {routine.length > 0 && (
                 <div className="mt-6 space-y-4">
                     <h3 className="text-xl font-bold text-center">Tu Rutina de Hoy</h3>
-                    {routine.map((exercise, index) => (
-                        <Card key={index} className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                            <div className="flex-1">
-                                <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4>
-                                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{exercise.sets} x {exercise.reps}</span> repeticiones</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Peso: {exercise.weight}</p>
-                                <div className="mt-2 flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
-                                    <span className="flex items-center gap-1"><Clock size={14}/> {exercise.estimatedDuration}</span>
-                                    <span className="flex items-center gap-1"><Dumbbell size={14}/> {exercise.difficultyLevel}</span>
-                                </div>
+                    <Card>
+                        <div className="flex justify-between items-center">
+                            <Timer title="Cronómetro General" direction="up" />
+                            <div className="text-center px-4">
+                                <p className="font-semibold text-gray-700 dark:text-gray-300">Calorías Totales (Est.)</p>
+                                <p className="font-mono text-4xl font-bold text-orange-500">{Math.round(totalCaloriesBurned)}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">kcal</p>
                             </div>
-                            <Button
-                                asLink={true}
-                                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoSearchQuery)}`}
-                                variant="youtube"
-                                className="w-full sm:w-auto"
-                            >
-                                <Youtube size={18} />
-                                Ver Video
-                            </Button>
-                        </Card>
+                        </div>
+                    </Card>
+
+                    {routine.map((exercise, index) => (
+                        <React.Fragment key={index}>
+                            <Card className={`border-2 ${exercise.completed ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-transparent'}`}>
+                                <button
+                                    onClick={() => handleDeleteExercise(index)}
+                                    className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10"
+                                    aria-label="Eliminar ejercicio"
+                                >
+                                    <X size={18} />
+                                </button>
+                                <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                                            <div>
+                                                <label className="text-xs font-medium">Series</label>
+                                                <input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} onBlur={() => handleRecalculateCalories(index)} className={inputClasses} />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-medium">Reps</label>
+                                                <input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} onBlur={() => handleRecalculateCalories(index)} className={inputClasses} />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-medium">Peso (kg)</label>
+                                                <input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} onBlur={() => handleRecalculateCalories(index)} className={inputClasses} />
+                                            </div>
+                                             <div>
+                                                <label className="text-xs font-medium">Equipo</label>
+                                                <select value={exercise.equipment} onChange={(e) => handleExerciseUpdate(index, 'equipment', e.target.value)} className={inputClasses}>
+                                                    <option>Mancuerna</option>
+                                                    <option>Barra</option>
+                                                    <option>Peso Corporal</option>
+                                                    <option>Máquina</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+                                            <span className={`flex items-center gap-1 ${recalculatingIndex === index ? 'animate-pulse' : ''}`}>
+                                                <Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="w-full sm:w-auto flex flex-col gap-2 mt-2 sm:mt-0">
+                                        <Button onClick={() => handleToggleComplete(index)} variant={exercise.completed ? 'secondary' : 'success'} className="w-full">
+                                            <Check size={18} /> {exercise.completed ? 'Deshacer' : 'Terminado'}
+                                        </Button>
+                                        <Button asLink={true} href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoSearchQuery)}`} variant="youtube" className="w-full">
+                                            <Youtube size={18} /> Ver Video
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Card>
+
+                            {index < routine.length - 1 && (
+                                <Card>
+                                    <Timer title="Descanso" initialSeconds={restTime} onTimeSet={setRestTime} direction="down" />
+                                </Card>
+                            )}
+                        </React.Fragment>
                     ))}
+                    <Button onClick={handleFinishAndSave} variant="primary" className="w-full mt-4">
+                        <CheckCircle size={20} /> Finalizar y Guardar Rutina
+                    </Button>
                 </div>
             )}
         </div>
@@ -690,6 +998,9 @@ export default function App() {
     const [dailyLog, setDailyLog] = useState({});
     const [weightHistory, setWeightHistory] = useState([]);
     const [foodDatabase, setFoodDatabase] = useState([]);
+    const [bodyMeasurements, setBodyMeasurements] = useState([]);
+    const [completedWorkouts, setCompletedWorkouts] = useState([]);
+    const [currentAiRoutine, setCurrentAiRoutine] = useState([]);
 
     useEffect(() => {
         if(firebaseData) {
@@ -729,7 +1040,6 @@ export default function App() {
         await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
     }, [firebaseServices, userId]);
 
-    // Listener de datos principal
     useEffect(() => {
         if (isAuthReady && firebaseServices && userId) {
             const { db } = firebaseServices;
@@ -761,15 +1071,17 @@ export default function App() {
             const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => {
                 const foods = snap.docs.map(d => ({ ...d.data(), id: d.id }));
                 setFoodDatabase(foods);
-                if (foods.length === 0) { // Precargar base de datos de alimentos si está vacía
+                if (foods.length === 0) {
                     [{ name: 'Pechuga de Pollo', c: 165, p: 31, h: 0, g: 3.6 }, { name: 'Arroz Blanco Cocido', c: 130, p: 2.7, h: 28, g: 0.3 }, { name: 'Huevo Entero', c: 155, p: 13, h: 1.1, g: 11 }, { name: 'Avena en Hojuelas', c: 389, p: 16.9, h: 66.3, g: 6.9 }].forEach(f => handleAddFoodToDb({name:f.name, calories_per_100g: f.c, protein_per_100g: f.p, carbs_per_100g: f.h, fat_per_100g: f.g}));
                 }
             });
-            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); };
+            const unsubMeasurements = onSnapshot(collection(db, `${userDocPath}/bodyMeasurements`), (snap) => setBodyMeasurements(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
+            const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
+
+            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); };
         }
     }, [isAuthReady, firebaseServices, userId, handleAddFoodToDb]);
 
-    // Handlers para actualizar datos
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { goals: newGoals }); };
     const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutSchedule: newSchedule }); };
     const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutOptions: newOptions }); };
@@ -777,6 +1089,24 @@ export default function App() {
     const handleAddWeight = async (weight) => { if (!firebaseServices || !userId) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
     const handleDeleteFood = async (foodId) => { if (!firebaseServices || !userId) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/foodDatabase`, foodId)); };
     const handleAddFood = async (foodData) => { await handleAddFoodToDb(foodData); };
+    
+    const handleSaveWorkout = async (workoutData) => {
+        if (!firebaseServices || !userId) return;
+        const workoutLog = {
+            date: new Date().toISOString(),
+            exercises: workoutData
+        };
+        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/completedWorkouts`), workoutLog);
+    };
+
+    const handleAddMeasurements = async (measurements) => {
+        if (!firebaseServices || !userId) return;
+        const measurementLog = {
+            date: new Date().toISOString().slice(0, 10),
+            ...measurements
+        };
+        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/bodyMeasurements`), measurementLog);
+    };
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
@@ -788,11 +1118,11 @@ export default function App() {
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
-            case 'progress': return <ProgressTracker weightHistory={weightHistory} handleAddWeight={handleAddWeight} handleGoBack={() => setView('dashboard')} />;
+            case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings userData={userData} handleUpdateGoals={handleUpdateGoals} handleGoBack={() => setView('dashboard')} />;
-            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} handleGoBack={() => setView('dashboard')} />;
-            default: return <Dashboard userData={userData} dailyLog={dailyLog} weightHistory={weightHistory} setView={setView} handleLogFood={handleLogFood} />;
+            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} />;
+            default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
 
