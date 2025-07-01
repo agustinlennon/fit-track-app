@@ -543,7 +543,11 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUp
         try {
             await handleLinkAccount(email, password, name);
         } catch (err) {
-            setError(err.message);
+            if (err.code === 'auth/operation-not-allowed') {
+                setError('Error: El inicio de sesión con Email/Contraseña no está habilitado en la configuración de Firebase.');
+            } else {
+                setError(err.message);
+            }
         }
     };
 
@@ -570,7 +574,7 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUp
                         <label className="block text-sm font-medium">Contraseña</label>
                         <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
                     </div>
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
+                    {error && <p className="text-red-500 text-sm p-2 bg-red-100 dark:bg-red-900/50 rounded-lg">{error}</p>}
                     <Button type="submit" className="w-full">Crear Cuenta y Guardar</Button>
                 </form>
             </Card>
@@ -1238,7 +1242,6 @@ export default function App() {
 
         } catch (error) {
             console.error("Error linking account:", error);
-            alert("Error al vincular la cuenta: " + error.message);
             throw error;
         }
     };
