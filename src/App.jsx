@@ -133,12 +133,10 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
         }
 
         try {
-            // Paso 1: Estimar las calorías del entrenamiento planeado
             const caloriePrompt = `Estima las calorías totales quemadas para el siguiente plan de entrenamiento: "${workoutText}". Responde solo con un número (ej: 450).`;
             const estimatedCaloriesText = await callGeminiAPI(caloriePrompt);
             const estimatedCalories = parseInt(estimatedCaloriesText.match(/\d+/)[0], 10) || 0;
 
-            // Paso 2: Usar la estimación para obtener una recomendación de comida
             const foodPrompt = `Mi objetivo de calorías diario es ${userData.goals.calories} kcal. Hoy voy a realizar un entrenamiento (${workoutText}) donde se estima que quemaré ${estimatedCalories} kcal adicionales. Basado en esto, ¿cuál debería ser mi ingesta calórica total hoy? Además, sugiere una comida post-entrenamiento rica en proteínas y carbohidratos para ayudar a la recuperación. Responde en español, de forma concisa y amigable.`;
             const recommendationText = await callGeminiAPI(foodPrompt);
             setAiRecommendation({ text: recommendationText, loading: false });
@@ -545,7 +543,7 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
 };
 
 const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleRegister, handleLogout, handleUpdateGoals }) => {
-    const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+    const [authMode, setAuthMode] = useState('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
@@ -1366,9 +1364,9 @@ export default function App() {
     return (
         <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen font-sans">
              <div className="flex flex-col sm:flex-row">
-                <nav className="fixed bottom-0 sm:static sm:h-screen w-full sm:w-64 bg-white dark:bg-gray-800 shadow-lg sm:shadow-none border-t sm:border-r border-gray-200 dark:border-gray-700 p-2 sm:p-4 z-40">
-                    <div className="flex flex-row sm:flex-col justify-around sm:justify-start sm:gap-2 h-full">
-                        <div className="hidden sm:flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
+                <nav className="fixed bottom-0 sm:static sm:h-screen w-full sm:w-64 bg-white dark:bg-gray-800 shadow-lg sm:shadow-none border-t sm:border-r border-gray-200 p-2 sm:p-4 z-40">
+                    <div className="hidden sm:flex sm:flex-col sm:justify-start sm:gap-2 h-full">
+                        <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
                         <NavItem icon={History} label="Historial" viewName="history" />
@@ -1376,13 +1374,26 @@ export default function App() {
                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
-                        
-                        <div className="mt-auto hidden sm:block">
+                        <div className="mt-auto">
                            <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">
                                {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
                            </button>
                         </div>
+                    </div>
+                    <div className="sm:hidden flex flex-row items-center gap-4 overflow-x-auto flex-nowrap h-full">
+                        <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
+                        <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
+                        <NavItem icon={History} label="Historial" viewName="history" />
+                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
+                        <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
+                        <NavItem icon={User} label="Progreso" viewName="progress" />
+                        <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
+                        <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
+                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">
+                           {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}
+                           <span className="text-xs font-medium">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
+                        </button>
                     </div>
                 </nav>
                 <main className="flex-1 p-4 sm:p-8 pb-24 sm:pb-8">
