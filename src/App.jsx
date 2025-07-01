@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History } from 'lucide-react';
 
 // --- INICIALIZACIÓN DE FIREBASE ---
 function initializeFirebase() {
@@ -24,6 +24,34 @@ function initializeFirebase() {
 
 const firebaseData = initializeFirebase();
 const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
+
+// --- SERVICIO CENTRALIZADO PARA LA API DE GEMINI ---
+const callGeminiAPI = async (prompt, generationConfig = null) => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+  if (generationConfig) {
+    payload.generationConfig = generationConfig;
+  }
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return result.candidates[0].content.parts[0].text;
+  } else {
+    console.error("Invalid response structure from API:", result);
+    throw new Error("Respuesta inválida de la API");
+  }
+};
 
 
 // --- COMPONENTES DE UI REUTILIZABLES ---
@@ -97,7 +125,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
       setAiRecommendation({ text: 'Analizando tu día...', loading: true });
       const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
       const todayWorkouts = userData.workoutSchedule[todayDay] || [];
-      const workoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(', ') : 'Descanso';
+      const workoutText = Array.isArray(todayWorkouts) && todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(', ') : 'Descanso';
 
       if (workoutText === 'Descanso') {
         setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
@@ -107,13 +135,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
       const prompt = `Basado en el siguiente entrenamiento de hoy: "${workoutText}" y mis objetivos nutricionales de ${JSON.stringify(userData.goals)}, calcula una recomendación de ingesta de proteína para hoy y sugiere una comida post-entrenamiento simple y efectiva. Responde en español y de forma concisa.`;
 
       try {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error('API call failed');
-        const result = await response.json();
-        const recommendationText = result.candidates[0].content.parts[0].text;
+        const recommendationText = await callGeminiAPI(prompt);
         setAiRecommendation({ text: recommendationText, loading: false });
       } catch (error) {
         console.error("Error fetching AI recommendation:", error);
@@ -136,11 +158,11 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
       startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
     }
 
-    const filteredWorkouts = completedWorkouts.filter(w => new Date(w.date) >= startDate);
+    const filteredWorkouts = Array.isArray(completedWorkouts) ? completedWorkouts.filter(w => new Date(w.date) >= startDate) : [];
     
     const totalWorkouts = filteredWorkouts.length;
-    const totalSets = filteredWorkouts.reduce((acc, w) => acc + w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0), 0);
-    const totalReps = filteredWorkouts.reduce((acc, w) => acc + w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0), 0);
+    const totalSets = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
+    const totalReps = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0) : 0), 0);
 
     return { totalWorkouts, totalSets, totalReps };
   }, [completedWorkouts, timeFilter]);
@@ -184,7 +206,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
         <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
           <h3 className="font-semibold text-gray-700 dark:text-gray-200">Entrenamiento programado:</h3>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-            {todaysPlan.length > 0 ? todaysPlan.map(p => `${p.name} a las ${p.time}`).join(' / ') : 'Día de descanso'}
+            {Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(p => `${p.name} a las ${p.time}`).join(' / ') : 'Día de descanso'}
           </p>
           <h3 className="font-semibold text-gray-700 dark:text-gray-200">Recomendación de la IA:</h3>
           <p className={`text-sm text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
@@ -298,7 +320,7 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (foodDatabase.length > 0 && !selectedFoodId) {
+        if (Array.isArray(foodDatabase) && foodDatabase.length > 0 && !selectedFoodId) {
             setSelectedFoodId(foodDatabase[0].id);
         }
     }, [foodDatabase, selectedFoodId]);
@@ -330,7 +352,7 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
                 <div>
                     <label htmlFor="food" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seleccionar Alimento</label>
                     <select id="food" value={selectedFoodId} onChange={(e) => setSelectedFoodId(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">
-                        {filteredFoodDatabase.map(food => (<option key={food.id} value={food.id}>{food.name}</option>))}
+                        {Array.isArray(filteredFoodDatabase) && filteredFoodDatabase.map(food => (<option key={food.id} value={food.id}>{food.name}</option>))}
                     </select>
                 </div>
                 <div>
@@ -362,10 +384,10 @@ const ProgressTracker = ({ weightHistory, bodyMeasurements, handleAddWeight, han
         if (chartView === 'weight') {
             return weightHistory;
         }
-        return bodyMeasurements.map(m => ({
+        return Array.isArray(bodyMeasurements) ? bodyMeasurements.map(m => ({
             date: m.date,
             [chartView]: m[chartView]
-        })).filter(item => item[chartView] !== undefined);
+        })).filter(item => item[chartView] !== undefined) : [];
     }, [chartView, weightHistory, bodyMeasurements]);
 
     const onAddWeight = () => {
@@ -497,30 +519,81 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
             </Card>
             <Card>
                  <h3 className="font-bold text-lg mb-3">Alimentos Guardados</h3>
-                 <ul className="space-y-2 max-h-96 overflow-y-auto">{(foodDatabase || []).map(food => (<li key={food.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md"><span>{food.name}</span><button onClick={() => handleDeleteFood(food.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18} /></button></li>))}</ul>
+                 <ul className="space-y-2 max-h-96 overflow-y-auto">{Array.isArray(foodDatabase) && foodDatabase.map(food => (<li key={food.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md"><span>{food.name}</span><button onClick={() => handleDeleteFood(food.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18} /></button></li>))}</ul>
             </Card>
         </div>
     );
 };
 
-const AppSettings = ({ userData, handleUpdateGoals, handleGoBack }) => {
-    if (!userData) { return <Card><p>Cargando ajustes...</p></Card>; }
+const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUpdateGoals }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [error, setError] = useState('');
+    const [goals, setGoals] = useState(userData?.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
 
-    const [goals, setGoals] = useState(userData.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
-    const handleChange = (e) => setGoals({ ...goals, [e.target.name]: parseFloat(e.target.value) });
-    const handleSubmit = (e) => { e.preventDefault(); handleUpdateGoals(goals); };
-    
-    return (
-        <div>
-            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Ajustes y Objetivos</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
+    useEffect(() => {
+        if (userData?.goals) setGoals(userData.goals);
+        if (userData?.name && !user.isAnonymous) setName(userData.name);
+    }, [userData, user]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        try {
+            await handleLinkAccount(email, password, name);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const handleGoalsSubmit = (e) => {
+        e.preventDefault();
+        handleUpdateGoals(goals);
+    };
+
+    if (user && user.isAnonymous) {
+        return (
             <Card>
+                <h2 className="text-2xl font-bold text-center mb-2">Guardar Progreso</h2>
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">Crea una cuenta para guardar tus datos y acceder desde cualquier dispositivo.</p>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium">Nombre</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">Email</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">Contraseña</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
+                    </div>
+                    {error && <p className="text-red-500 text-sm">{error}</p>}
+                    <Button type="submit" className="w-full">Crear Cuenta y Guardar</Button>
+                </form>
+            </Card>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <h2 className="text-2xl font-bold mb-4">Hola, {userData?.name || user?.email}</h2>
+                <p className="text-gray-600 dark:text-gray-400">Email: {user?.email}</p>
+                <Button onClick={handleLogout} variant="danger" className="w-full mt-6">
+                    <LogOut size={18} /> Cerrar Sesión
+                </Button>
+            </Card>
+            <Card>
+                <form onSubmit={handleGoalsSubmit} className="space-y-4">
                     <h3 className="font-bold text-lg mb-2">Objetivos Nutricionales Diarios</h3>
-                    <div><label className="block text-sm font-medium">Calorías (kcal)</label><input type="number" name="calories" value={goals.calories} onChange={handleChange} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
-                    <div><label className="block text-sm font-medium">Proteínas (g)</label><input type="number" name="protein" value={goals.protein} onChange={handleChange} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
-                    <div><label className="block text-sm font-medium">Carbohidratos (g)</label><input type="number" name="carbs" value={goals.carbs} onChange={handleChange} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
-                    <div><label className="block text-sm font-medium">Grasas (g)</label><input type="number" name="fat" value={goals.fat} onChange={handleChange} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
-                    <div className="pt-2"><Button type="submit" className="w-full">Guardar Cambios</Button></div>
+                    <div><label className="block text-sm font-medium">Calorías (kcal)</label><input type="number" name="calories" value={goals.calories} onChange={e => setGoals({...goals, calories: parseFloat(e.target.value)})} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
+                    <div><label className="block text-sm font-medium">Proteínas (g)</label><input type="number" name="protein" value={goals.protein} onChange={e => setGoals({...goals, protein: parseFloat(e.target.value)})} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
+                    <div><label className="block text-sm font-medium">Carbohidratos (g)</label><input type="number" name="carbs" value={goals.carbs} onChange={e => setGoals({...goals, carbs: parseFloat(e.target.value)})} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
+                    <div><label className="block text-sm font-medium">Grasas (g)</label><input type="number" name="fat" value={goals.fat} onChange={e => setGoals({...goals, fat: parseFloat(e.target.value)})} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" /></div>
+                    <div className="pt-2"><Button type="submit" className="w-full">Guardar Objetivos</Button></div>
                 </form>
             </Card>
         </div>
@@ -592,7 +665,7 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
                     <Button onClick={handleAddNewOption}><PlusCircle size={18}/></Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    {(workoutOptions || []).map(opt => <span key={opt} className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">{opt}</span>)}
+                    {Array.isArray(workoutOptions) && workoutOptions.map(opt => <span key={opt} className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">{opt}</span>)}
                 </div>
             </Card>
 
@@ -618,7 +691,7 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
                                         onChange={(e) => handleScheduleChange(day, index, 'name', e.target.value)} 
                                         className="w-full p-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg text-sm"
                                     >
-                                        {(workoutOptions || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                        {Array.isArray(workoutOptions) && workoutOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
                                     <button onClick={() => removeWorkoutFromDay(day, index)} className="text-red-500 hover:text-red-700 p-2"><Trash2 size={18}/></button>
                                 </div>
@@ -723,7 +796,7 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     );
 };
 
-const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, routine, setRoutine }) => {
+const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, handleSaveWorkout, routine, setRoutine }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [fatigueLevel, setFatigueLevel] = useState('normal');
@@ -736,20 +809,15 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
         setRoutine([]);
         setError('');
 
-        const profile = `Soy una persona con los siguientes datos: ${JSON.stringify(userData.goals)}. Mis objetivos son ganar masa muscular y mantenerme saludable.`;
-        const schedule = userData.workoutSchedule || {};
-        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-        const todayWorkouts = Array.isArray(schedule[todayDay]) ? schedule[todayDay] : [{name: 'Descanso'}];
-        const todayWorkoutText = todayWorkouts.map(w => w.name).join(' y ');
+        const historySummary = Array.isArray(completedWorkouts) ? completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
 
-        const prompt = `${profile} 
-            Mi plan semanal es: ${JSON.stringify(schedule)}. 
-            Hoy es ${todayDay} y me toca: ${todayWorkoutText}.
-            Mi nivel de energía/fatiga hoy es: ${fatigueLevel}.
-            Notas adicionales para el entrenador IA: "${userNotes || 'Ninguna'}".
+        const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
+            Mi plan para hoy es: ${userData.workoutSchedule[new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()].map(w => w.name).join(' y ')}.
+            Mi nivel de energía hoy es: ${fatigueLevel}.
+            Mi historial reciente es: ${historySummary || 'ninguno'}.
+            Notas adicionales: "${userNotes || 'Ninguna'}".
             
-            Basado en todo esto, genera una rutina detallada para el entrenamiento de hoy.
-            Para cada ejercicio, proporciona un término de búsqueda en español para encontrar un video en YouTube, sugiere un tipo de equipamiento y estima las calorías quemadas (caloriesBurned).`;
+            Basado en todo esto, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
         
         const generationConfig = {
             responseMimeType: "application/json",
@@ -774,24 +842,12 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
         };
 
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig };
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            
-            if (!response.ok) throw new Error(`API call failed: ${response.status} ${response.statusText}`);
-            
-            const result = await response.json();
-
-            if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                const parsedJson = JSON.parse(result.candidates[0].content.parts[0].text);
-                const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
-                setRoutine(editableRoutine);
-                 if (!parsedJson.routine || parsedJson.routine.length === 0) {
-                     setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
-                 }
-            } else {
-                setError("No se pudo obtener una rutina. La respuesta de la IA estaba vacía o en un formato incorrecto.");
+            const resultText = await callGeminiAPI(prompt, generationConfig);
+            const parsedJson = JSON.parse(resultText);
+            const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
+            setRoutine(editableRoutine);
+            if (!parsedJson.routine || parsedJson.routine.length === 0) {
+                setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
             }
         } catch (err) {
             setError(`Ocurrió un error al contactar al asistente de IA. Error: ${err.message}`);
@@ -811,21 +867,12 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
         Responde únicamente con el nuevo valor de calorías quemadas (ej: "60-80 kcal").`;
 
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!response.ok) throw new Error('API call failed');
-            const result = await response.json();
-            const newCalories = result.candidates[0].content.parts[0].text.trim();
-            
+            const newCalories = await callGeminiAPI(prompt);
             const updatedRoutine = [...routine];
-            updatedRoutine[exerciseIndex].caloriesBurned = newCalories;
+            updatedRoutine[exerciseIndex].caloriesBurned = newCalories.trim();
             setRoutine(updatedRoutine);
-
         } catch (error) {
             console.error("Error recalculating calories:", error);
-            // Opcional: mostrar un error al usuario
         } finally {
             setRecalculatingIndex(null);
         }
@@ -855,7 +902,7 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
     };
 
     const totalCaloriesBurned = useMemo(() => {
-        return routine.reduce((total, exercise) => {
+        return Array.isArray(routine) ? routine.reduce((total, exercise) => {
             const calString = exercise.caloriesBurned || "0";
             const numbers = calString.match(/\d+/g);
             if (!numbers) return total;
@@ -866,7 +913,7 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
                 return total + parseInt(numbers[0], 10);
             }
             return total;
-        }, 0);
+        }, 0) : 0;
     }, [routine]);
 
     const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
@@ -902,7 +949,7 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
             {isLoading && <div className="mt-6 text-center p-4"><p className="animate-pulse text-lg">El entrenador IA está preparando tu sesión...</p></div>}
             {error && <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg">{error}</div>}
 
-            {routine.length > 0 && (
+            {Array.isArray(routine) && routine.length > 0 && (
                 <div className="mt-6 space-y-4">
                     <h3 className="text-xl font-bold text-center">Tu Rutina de Hoy</h3>
                     <Card>
@@ -985,12 +1032,117 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, rou
     );
 };
 
+const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
+    const [timeFilter, setTimeFilter] = useState('week');
+    const [muscleData, setMuscleData] = useState([]);
+    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
+    const filteredWorkouts = useMemo(() => {
+        const now = new Date();
+        let startDate;
+        if (timeFilter === 'day') {
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+        } else if (timeFilter === 'week') {
+            startDate = new Date(new Date().setDate(now.getDate() - 7));
+        } else { // month
+            startDate = new Date(new Date().setMonth(now.getMonth() - 1));
+        }
+        return Array.isArray(completedWorkouts) ? completedWorkouts.filter(w => new Date(w.date) >= startDate) : [];
+    }, [completedWorkouts, timeFilter]);
+
+    useEffect(() => {
+        if (filteredWorkouts.length === 0) {
+            setMuscleData([]);
+            return;
+        }
+
+        const analyzeMuscles = async () => {
+            setLoadingAnalysis(true);
+            const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
+            const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
+            
+            try {
+                const resultText = await callGeminiAPI(prompt);
+                const muscleMap = JSON.parse(resultText);
+
+                const muscleCounts = {};
+                filteredWorkouts.forEach(workout => {
+                    (Array.isArray(workout.exercises) ? workout.exercises : []).forEach(exercise => {
+                        const muscle = muscleMap[exercise.name] || 'Otro';
+                        if (!muscleCounts[muscle]) {
+                            muscleCounts[muscle] = 0;
+                        }
+                        muscleCounts[muscle] += parseInt(exercise.sets, 10) || 0;
+                    });
+                });
+
+                setMuscleData(Object.entries(muscleCounts).map(([name, sets]) => ({ name, sets })));
+
+            } catch (error) {
+                console.error("Error analyzing muscles:", error);
+                setMuscleData([]);
+            } finally {
+                setLoadingAnalysis(false);
+            }
+        };
+
+        analyzeMuscles();
+    }, [filteredWorkouts]);
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Historial de Entrenamientos</h2>
+                <Button onClick={handleGoBack} variant="secondary">Volver</Button>
+            </div>
+
+            <Card className="mb-6">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-xl text-gray-800 dark:text-white">Análisis Muscular</h3>
+                    <div className="flex gap-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
+                        <button onClick={() => setTimeFilter('day')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'day' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Día</button>
+                        <button onClick={() => setTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
+                        <button onClick={() => setTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
+                    </div>
+                </div>
+                {loadingAnalysis ? <p className="text-center animate-pulse">Analizando...</p> : 
+                <div className="h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={muscleData}>
+                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                            <XAxis dataKey="name" fontSize={12} />
+                            <YAxis />
+                            <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
+                            <Bar dataKey="sets" name="Series totales" fill="#3b82f6" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>}
+            </Card>
+
+            <div className="space-y-4">
+                {Array.isArray(filteredWorkouts) && filteredWorkouts.map(workout => (
+                    <Card key={workout.id}>
+                        <h3 className="font-bold text-lg mb-2">{new Date(workout.date).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })}</h3>
+                        <ul className="space-y-1">
+                            {(Array.isArray(workout.exercises) ? workout.exercises : []).map((ex, i) => (
+                                <li key={i} className="text-sm text-gray-600 dark:text-gray-300">
+                                    - {ex.name}: {ex.sets} series de {ex.reps} reps con {ex.weight}.
+                                </li>
+                            ))}
+                        </ul>
+                    </Card>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 
 // --- COMPONENTE PRINCIPAL DE LA APP ---
 export default function App() {
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [firebaseServices, setFirebaseServices] = useState(null);
-    const [userId, setUserId] = useState(null);
+    const [user, setUser] = useState(null);
     const [view, setView] = useState('dashboard');
     const [isDarkMode, setIsDarkMode] = useState(true);
 
@@ -1010,22 +1162,10 @@ export default function App() {
             setFirebaseServices({ auth, db, app });
 
             onAuthStateChanged(auth, async (user) => {
-                let currentToken = null;
-                if (typeof __initial_auth_token !== 'undefined') {
-                    currentToken = __initial_auth_token;
-                }
-                
-                if (user) { 
-                    setUserId(user.uid);
-                } else if (currentToken) {
-                    try {
-                        await signInWithCustomToken(auth, currentToken);
-                    } catch(e) {
-                        console.error("Error with custom token, signing in anonymously", e);
-                        await signInAnonymously(auth);
-                    }
+                if (user) {
+                    setUser(user);
                 } else {
-                    await signInAnonymously(auth);
+                    await signInAnonymously(auth).catch(err => console.error("Anonymous sign in failed:", err));
                 }
                 setIsAuthReady(true);
             });
@@ -1035,34 +1175,32 @@ export default function App() {
     }, []);
 
     const handleAddFoodToDb = useCallback(async (foodData) => {
-        if (!firebaseServices || !userId) return;
+        if (!firebaseServices || !user) return;
         const { db } = firebaseServices;
-        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
-    }, [firebaseServices, userId]);
+        await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/foodDatabase`), foodData);
+    }, [firebaseServices, user]);
 
     useEffect(() => {
-        if (isAuthReady && firebaseServices && userId) {
+        if (isAuthReady && firebaseServices && user) {
             const { db } = firebaseServices;
-            const userDocPath = `artifacts/${appId}/users/${userId}`;
+            const userDocPath = `artifacts/${appId}/users/${user.uid}`;
             
             const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (doc) => {
                 if(doc.exists()){ 
                     setUserData(doc.data()); 
-                } else { 
-                    const initialData = {
+                } else if (user.isAnonymous) {
+                     const initialData = {
+                        name: "Invitado",
+                        email: null,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
                         workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
                         workoutSchedule: { 
-                            lunes: [{time: '18:00', name: 'Natación'}], 
-                            martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
-                            miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], 
-                            jueves: [{time: '20:00', name: 'Fútbol'}], 
-                            viernes: [{time: '18:00', name: 'Natación'}], 
-                            sabado: [], 
-                            domingo: [] 
+                            lunes: [{time: '18:00', name: 'Natación'}], martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
+                            miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], jueves: [{time: '20:00', name: 'Fútbol'}], 
+                            viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
                         }
                     };
-                    setDoc(doc.ref, initialData); 
+                    setDoc(doc.ref, initialData);
                 }
             });
 
@@ -1071,7 +1209,7 @@ export default function App() {
             const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => {
                 const foods = snap.docs.map(d => ({ ...d.data(), id: d.id }));
                 setFoodDatabase(foods);
-                if (foods.length === 0) {
+                if (foods.length === 0 && !user.isAnonymous) {
                     [{ name: 'Pechuga de Pollo', c: 165, p: 31, h: 0, g: 3.6 }, { name: 'Arroz Blanco Cocido', c: 130, p: 2.7, h: 28, g: 0.3 }, { name: 'Huevo Entero', c: 155, p: 13, h: 1.1, g: 11 }, { name: 'Avena en Hojuelas', c: 389, p: 16.9, h: 66.3, g: 6.9 }].forEach(f => handleAddFoodToDb({name:f.name, calories_per_100g: f.c, protein_per_100g: f.p, carbs_per_100g: f.h, fat_per_100g: f.g}));
                 }
             });
@@ -1080,37 +1218,66 @@ export default function App() {
 
             return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); };
         }
-    }, [isAuthReady, firebaseServices, userId, handleAddFoodToDb]);
+    }, [isAuthReady, firebaseServices, user, handleAddFoodToDb]);
 
-    const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { goals: newGoals }); };
-    const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutSchedule: newSchedule }); };
-    const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !userId) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/profile/data`), { workoutOptions: newOptions }); };
-    const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !userId) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, userId]);
-    const handleAddWeight = async (weight) => { if (!firebaseServices || !userId) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
-    const handleDeleteFood = async (foodId) => { if (!firebaseServices || !userId) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${userId}/foodDatabase`, foodId)); };
+    const handleLinkAccount = async (email, password, name) => {
+        const { auth, db } = firebaseServices;
+        const credential = EmailAuthProvider.credential(email, password);
+        const oldUid = auth.currentUser.uid;
+        
+        try {
+            const userCredential = await linkWithCredential(auth.currentUser, credential);
+            const newUser = userCredential.user;
+            const newUid = newUser.uid;
+
+            // Update profile with new name and email
+            await setDoc(doc(db, `artifacts/${appId}/users/${newUid}/profile/data`), {
+                name: name,
+                email: newUser.email,
+            }, { merge: true });
+
+        } catch (error) {
+            console.error("Error linking account:", error);
+            alert("Error al vincular la cuenta: " + error.message);
+            throw error;
+        }
+    };
+
+    const handleLogout = async () => {
+        const { auth } = firebaseServices;
+        await signOut(auth);
+        setUserData(null);
+        setDailyLog({});
+        setWeightHistory([]);
+        setFoodDatabase([]);
+        setBodyMeasurements([]);
+        setCompletedWorkouts([]);
+        setCurrentAiRoutine([]);
+    };
+
+    const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
+    const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutSchedule: newSchedule }); };
+    const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutOptions: newOptions }); };
+    const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, user]);
+    const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
+    const handleDeleteFood = async (foodId) => { if (!firebaseServices || !user) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/foodDatabase`, foodId)); };
     const handleAddFood = async (foodData) => { await handleAddFoodToDb(foodData); };
     
     const handleSaveWorkout = async (workoutData) => {
-        if (!firebaseServices || !userId) return;
-        const workoutLog = {
-            date: new Date().toISOString(),
-            exercises: workoutData
-        };
-        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/completedWorkouts`), workoutLog);
+        if (!firebaseServices || !user) return;
+        const workoutLog = { date: new Date().toISOString(), exercises: workoutData };
+        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`), workoutLog);
     };
 
     const handleAddMeasurements = async (measurements) => {
-        if (!firebaseServices || !userId) return;
-        const measurementLog = {
-            date: new Date().toISOString().slice(0, 10),
-            ...measurements
-        };
-        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${userId}/bodyMeasurements`), measurementLog);
+        if (!firebaseServices || !user) return;
+        const measurementLog = { date: new Date().toISOString().slice(0, 10), ...measurements };
+        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/bodyMeasurements`), measurementLog);
     };
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
-    if (!isAuthReady || !firebaseServices || !userData) {
+    if (!isAuthReady || !firebaseServices || !user || !userData) {
         return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Inicializando FitTrack AI...</p></div></div>;
     }
 
@@ -1120,8 +1287,9 @@ export default function App() {
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
-            case 'settings': return <AppSettings userData={userData} handleUpdateGoals={handleUpdateGoals} handleGoBack={() => setView('dashboard')} />;
-            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} />;
+            case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} />;
+            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
+            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
@@ -1140,6 +1308,7 @@ export default function App() {
                         <div className="hidden sm:flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
+                        <NavItem icon={History} label="Historial" viewName="history" />
                         <NavItem icon={Utensils} label="Comidas" viewName="food" />
                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
@@ -1150,7 +1319,6 @@ export default function App() {
                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">
                                {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
                            </button>
-                           <p className="text-xs text-center text-gray-400 mt-4">ID: <span className="font-mono break-all">{userId}</span></p>
                         </div>
                     </div>
                 </nav>
