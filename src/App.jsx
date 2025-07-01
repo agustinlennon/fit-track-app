@@ -1369,13 +1369,13 @@ export default function App() {
                         <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
-                        <NavItem icon={History} label="Historial" viewName="history" />
-                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
+                        <NavItem icon={History} label="Historial" viewName="history" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
+                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
+                        <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                         <div className="mt-auto">
-                           <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">
                                {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
                            </button>
@@ -1384,12 +1384,12 @@ export default function App() {
                     <div className="sm:hidden flex flex-row items-center gap-4 overflow-x-auto flex-nowrap h-full">
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
-                        <NavItem icon={History} label="Historial" viewName="history" />
-                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
+                        <NavItem icon={History} label="Historial" viewName="history" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
-                        <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
+                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
                         <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
+                        <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                         <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">
                            {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}
                            <span className="text-xs font-medium">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
