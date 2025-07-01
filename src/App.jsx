@@ -525,7 +525,8 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
     );
 };
 
-const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUpdateGoals }) => {
+const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleRegister, handleLogout, handleUpdateGoals }) => {
+    const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
@@ -541,11 +542,20 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUp
         e.preventDefault();
         setError('');
         try {
-            await handleLinkAccount(email, password, name);
+            if (authMode === 'register') {
+                await handleRegister(email, password, name);
+            } else {
+                await handleLogin(email, password);
+            }
         } catch (err) {
             if (err.code === 'auth/operation-not-allowed') {
                 setError('Error: El inicio de sesión con Email/Contraseña no está habilitado en la configuración de Firebase.');
-            } else {
+            } else if (err.code === 'auth/email-already-in-use') {
+                setError('El email ya está en uso por otra cuenta.');
+            } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+                setError('Email o contraseña incorrectos.');
+            }
+            else {
                 setError(err.message);
             }
         }
@@ -559,13 +569,21 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUp
     if (user && user.isAnonymous) {
         return (
             <Card>
-                <h2 className="text-2xl font-bold text-center mb-2">Guardar Progreso</h2>
-                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">Crea una cuenta para guardar tus datos y acceder desde cualquier dispositivo.</p>
+                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+                    <button onClick={() => setAuthMode('login')} className={`flex-1 py-2 font-semibold ${authMode === 'login' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Iniciar Sesión</button>
+                    <button onClick={() => setAuthMode('register')} className={`flex-1 py-2 font-semibold ${authMode === 'register' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Registrarse</button>
+                </div>
+                <h2 className="text-2xl font-bold text-center mb-2">{authMode === 'register' ? 'Crear Cuenta' : 'Iniciar Sesión'}</h2>
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
+                    {authMode === 'register' ? 'Crea una cuenta para guardar tus datos y acceder desde cualquier dispositivo.' : 'Inicia sesión para ver tu progreso guardado.'}
+                </p>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium">Nombre</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
-                    </div>
+                    {authMode === 'register' && (
+                        <div>
+                            <label className="block text-sm font-medium">Nombre</label>
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium">Email</label>
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
@@ -575,7 +593,7 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogout, handleUp
                         <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
                     </div>
                     {error && <p className="text-red-500 text-sm p-2 bg-red-100 dark:bg-red-900/50 rounded-lg">{error}</p>}
-                    <Button type="submit" className="w-full">Crear Cuenta y Guardar</Button>
+                    <Button type="submit" className="w-full">{authMode === 'register' ? 'Registrarse' : 'Iniciar Sesión'}</Button>
                 </form>
             </Card>
         );
@@ -1224,22 +1242,40 @@ export default function App() {
         }
     }, [isAuthReady, firebaseServices, user, handleAddFoodToDb]);
 
+    const handleRegister = async (email, password, name) => {
+        const { auth, db } = firebaseServices;
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        const initialData = {
+            name: name,
+            email: user.email,
+            goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
+            workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
+            workoutSchedule: { 
+                lunes: [{time: '18:00', name: 'Natación'}], martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
+                miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], jueves: [{time: '20:00', name: 'Fútbol'}], 
+                viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
+            }
+        };
+        await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`), initialData);
+    };
+
+    const handleLogin = async (email, password) => {
+        const { auth } = firebaseServices;
+        await signInWithEmailAndPassword(auth, email, password);
+    };
+
     const handleLinkAccount = async (email, password, name) => {
         const { auth, db } = firebaseServices;
         const credential = EmailAuthProvider.credential(email, password);
-        const oldUid = auth.currentUser.uid;
         
         try {
             const userCredential = await linkWithCredential(auth.currentUser, credential);
             const newUser = userCredential.user;
-            const newUid = newUser.uid;
-
-            // Update profile with new name and email
-            await setDoc(doc(db, `artifacts/${appId}/users/${newUid}/profile/data`), {
+            await setDoc(doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`), {
                 name: name,
                 email: newUser.email,
             }, { merge: true });
-
         } catch (error) {
             console.error("Error linking account:", error);
             throw error;
@@ -1290,7 +1326,7 @@ export default function App() {
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
-            case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} />;
+            case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
