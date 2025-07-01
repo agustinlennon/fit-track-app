@@ -122,25 +122,31 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     if (!userData || !userData.workoutSchedule) return;
 
     const getAiRecommendation = async () => {
-      setAiRecommendation({ text: 'Analizando tu día...', loading: true });
-      const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-      const todayWorkouts = userData.workoutSchedule[todayDay] || [];
-      const workoutText = Array.isArray(todayWorkouts) && todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(', ') : 'Descanso';
+        setAiRecommendation({ text: 'Analizando tu día...', loading: true });
+        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+        const todayWorkouts = userData.workoutSchedule[todayDay] || [];
+        const workoutText = Array.isArray(todayWorkouts) && todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
 
-      if (workoutText === 'Descanso') {
-        setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
-        return;
-      }
-      
-      const prompt = `Basado en el siguiente entrenamiento de hoy: "${workoutText}" y mis objetivos nutricionales de ${JSON.stringify(userData.goals)}, calcula una recomendación de ingesta de proteína para hoy y sugiere una comida post-entrenamiento simple y efectiva. Responde en español y de forma concisa.`;
+        if (workoutText === 'Descanso') {
+            setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
+            return;
+        }
 
-      try {
-        const recommendationText = await callGeminiAPI(prompt);
-        setAiRecommendation({ text: recommendationText, loading: false });
-      } catch (error) {
-        console.error("Error fetching AI recommendation:", error);
-        setAiRecommendation({ text: 'No se pudo obtener la recomendación. Intenta más tarde.', loading: false });
-      }
+        try {
+            // Paso 1: Estimar las calorías del entrenamiento planeado
+            const caloriePrompt = `Estima las calorías totales quemadas para el siguiente plan de entrenamiento: "${workoutText}". Responde solo con un número (ej: 450).`;
+            const estimatedCaloriesText = await callGeminiAPI(caloriePrompt);
+            const estimatedCalories = parseInt(estimatedCaloriesText.match(/\d+/)[0], 10) || 0;
+
+            // Paso 2: Usar la estimación para obtener una recomendación de comida
+            const foodPrompt = `Mi objetivo de calorías diario es ${userData.goals.calories} kcal. Hoy voy a realizar un entrenamiento (${workoutText}) donde se estima que quemaré ${estimatedCalories} kcal adicionales. Basado en esto, ¿cuál debería ser mi ingesta calórica total hoy? Además, sugiere una comida post-entrenamiento rica en proteínas y carbohidratos para ayudar a la recuperación. Responde en español, de forma concisa y amigable.`;
+            const recommendationText = await callGeminiAPI(foodPrompt);
+            setAiRecommendation({ text: recommendationText, loading: false });
+
+        } catch (error) {
+            console.error("Error fetching AI recommendation:", error);
+            setAiRecommendation({ text: 'No se pudo obtener la recomendación. Intenta más tarde.', loading: false });
+        }
     };
 
     getAiRecommendation();
@@ -201,19 +207,32 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
 
   return (
     <div className="space-y-6">
-      <Card>
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Plan de Hoy: {new Date().toLocaleDateString('es-ES', { weekday: 'long' })}</h2>
-        <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-          <h3 className="font-semibold text-gray-700 dark:text-gray-200">Entrenamiento programado:</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-            {Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(p => `${p.name} a las ${p.time}`).join(' / ') : 'Día de descanso'}
-          </p>
-          <h3 className="font-semibold text-gray-700 dark:text-gray-200">Recomendación de la IA:</h3>
-          <p className={`text-sm text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
+       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <Card className="lg:col-span-3 flex flex-col justify-between">
+          <div>
+            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Entrenamiento de Hoy</h3>
+            {Array.isArray(todaysPlan) && todaysPlan.length > 0 ? (
+                todaysPlan.map((p, i) => (
+                    <div key={i} className="flex justify-between items-baseline mt-4">
+                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{p.name}</p>
+                        <p className="text-lg text-gray-500 dark:text-gray-400">{p.time}</p>
+                    </div>
+                ))
+            ) : (
+                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 my-4">Descanso</p>
+            )}
+          </div>
+          <Button onClick={() => setView('ai-workout')} className="w-full mt-4">
+            <Sparkles size={18}/> Iniciar Rutina con IA
+          </Button>
+        </Card>
+        <Card className="lg:col-span-2">
+          <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación de la IA</h3>
+          <p className={`mt-2 text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
             {aiRecommendation.text}
           </p>
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       <Card>
         <div className="flex justify-between items-center mb-4">
@@ -1366,7 +1385,13 @@ export default function App() {
                         </div>
                     </div>
                 </nav>
-                <main className="flex-1 p-4 sm:p-8 pb-24 sm:pb-8">{renderView()}</main>
+                <main className="flex-1 p-4 sm:p-8 pb-24 sm:pb-8">
+                    <div className="mb-8">
+                        <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
+                        <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
+                    </div>
+                    {renderView()}
+                </main>
              </div>
         </div>
     );
