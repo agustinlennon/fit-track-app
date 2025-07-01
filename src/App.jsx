@@ -832,9 +832,12 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         setError('');
 
         const historySummary = Array.isArray(completedWorkouts) ? completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
+        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+        const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
+        const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
 
         const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
-            Mi plan para hoy es: ${userData.workoutSchedule[new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase()].map(w => w.name).join(' y ')}.
+            Mi plan para hoy es: ${todayWorkoutText}.
             Mi nivel de energía hoy es: ${fatigueLevel}.
             Mi historial reciente es: ${historySummary || 'ninguno'}.
             Notas adicionales: "${userNotes || 'Ninguna'}".
