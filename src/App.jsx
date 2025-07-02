@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star } from 'lucide-react';
 
 // --- INICIALIZACIÓN DE FIREBASE ---
 function initializeFirebase() {
@@ -26,6 +26,20 @@ const firebaseData = initializeFirebase();
 const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
 
 // --- SERVICIO CENTRALIZADO PARA LA API DE GEMINI ---
+const parseJsonFromMarkdown = (text) => {
+  try {
+    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+    if (jsonMatch && jsonMatch[1]) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Failed to parse JSON:", error);
+    console.error("Original text from AI:", text);
+    throw new Error("Respuesta JSON inválida o mal formada de la IA.");
+  }
+};
+
 const callGeminiAPI = async (prompt, generationConfig = null) => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
@@ -205,6 +219,10 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
 
   return (
     <div className="space-y-6">
+       <div className="mb-8">
+            <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
+            <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
+       </div>
        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <Card className="lg:col-span-3 flex flex-col justify-between">
           <div>
@@ -835,7 +853,7 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     );
 };
 
-const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, handleSaveWorkout, routine, setRoutine }) => {
+const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, handleSaveWorkout, routine, setRoutine, handleToggleFavorite }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [fatigueLevel, setFatigueLevel] = useState('normal');
@@ -852,6 +870,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
+        const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.join(', ')}. Intenta incluirlos si son apropiados.` : '';
 
         const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
             Mi plan para hoy es: ${todayWorkoutText}.
@@ -859,6 +878,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
             Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros.
             Mi nivel de energía hoy es: ${fatigueLevel}.
             Mi historial reciente es: ${historySummary || 'ninguno'}.
+            ${favoriteExercisesText}
             
             Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy.
             IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
@@ -887,7 +907,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
 
         try {
             const resultText = await callGeminiAPI(prompt, generationConfig);
-            const parsedJson = JSON.parse(resultText);
+            const parsedJson = parseJsonFromMarkdown(resultText);
             const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
             setRoutine(editableRoutine);
             if (!parsedJson.routine || parsedJson.routine.length === 0) {
@@ -1007,9 +1027,14 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                         </div>
                     </Card>
 
-                    {routine.map((exercise, index) => (
+                    {routine.map((exercise, index) => {
+                        const isFavorite = userData.favoriteExercises?.includes(exercise.name);
+                        return (
                         <React.Fragment key={index}>
                             <Card className={`border-2 ${exercise.completed ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-transparent'}`}>
+                                <button onClick={() => handleToggleFavorite(exercise.name)} className="absolute top-2 left-2 text-gray-400 hover:text-yellow-400 transition-colors z-10" aria-label="Marcar como favorito">
+                                    <Star size={20} className={isFavorite ? "text-yellow-400 fill-current" : ""} />
+                                </button>
                                 <button
                                     onClick={() => handleDeleteExercise(index)}
                                     className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10"
@@ -1017,7 +1042,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                                 >
                                     <X size={18} />
                                 </button>
-                                <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-6">
                                     <div className="flex-1">
                                         <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
@@ -1061,12 +1086,14 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                             </Card>
 
                             {index < routine.length - 1 && (
-                                <Card>
-                                    <Timer title="Descanso" initialSeconds={restTime} onTimeSet={setRestTime} direction="down" />
-                                </Card>
+                                <div className="max-w-md mx-auto w-full">
+                                    <Card>
+                                        <Timer title="Descanso" initialSeconds={restTime} onTimeSet={setRestTime} direction="down" />
+                                    </Card>
+                                </div>
                             )}
                         </React.Fragment>
-                    ))}
+                    )})}
                     <Button onClick={handleFinishAndSave} variant="primary" className="w-full mt-4">
                         <CheckCircle size={20} /> Finalizar y Guardar Rutina
                     </Button>
@@ -1107,7 +1134,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
             
             try {
                 const resultText = await callGeminiAPI(prompt);
-                const muscleMap = JSON.parse(resultText);
+                const muscleMap = parseJsonFromMarkdown(resultText);
 
                 const muscleCounts = {};
                 filteredWorkouts.forEach(workout => {
@@ -1238,6 +1265,7 @@ export default function App() {
                         email: null,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
                         workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
+                        favoriteExercises: [],
                         workoutSchedule: { 
                             lunes: [{time: '18:00', name: 'Natación'}], martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
                             miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], jueves: [{time: '20:00', name: 'Fútbol'}], 
@@ -1273,6 +1301,7 @@ export default function App() {
             email: user.email,
             goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
             workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
+            favoriteExercises: [],
             workoutSchedule: { 
                 lunes: [{time: '18:00', name: 'Natación'}], martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
                 miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], jueves: [{time: '20:00', name: 'Fútbol'}], 
@@ -1336,6 +1365,19 @@ export default function App() {
         await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/bodyMeasurements`), measurementLog);
     };
 
+    const handleToggleFavorite = async (exerciseName) => {
+        if (!firebaseServices || !user || !userData) return;
+        const { db } = firebaseServices;
+        const userDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`);
+        const isFavorite = userData.favoriteExercises?.includes(exerciseName);
+
+        if (isFavorite) {
+            await updateDoc(userDocRef, { favoriteExercises: arrayRemove(exerciseName) });
+        } else {
+            await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseName) });
+        }
+    };
+
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
     if (!isAuthReady || !firebaseServices || !user || !userData) {
@@ -1350,13 +1392,13 @@ export default function App() {
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
-            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} />;
+            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
 
     const NavItem = ({ icon: Icon, label, viewName }) => (
-        <button onClick={() => setView(viewName)} className={`flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-3 p-2 sm:px-4 rounded-lg w-full text-left transition-colors ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => setView(viewName)} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             <Icon size={22} /><span className="text-xs sm:text-base font-medium">{label}</span>
         </button>
     );
@@ -1381,14 +1423,14 @@ export default function App() {
                            </button>
                         </div>
                     </div>
-                    <div className="sm:hidden flex flex-row items-center gap-4 overflow-x-auto flex-nowrap h-full">
+                    <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
-                        <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
-                        <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
+                        <NavItem icon={Sparkles} label="Rutina IA" viewName="ai-workout" />
+                        <NavItem icon={Calendar} label="Plan" viewName="workout" />
                         <NavItem icon={History} label="Historial" viewName="history" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
                         <NavItem icon={Utensils} label="Comidas" viewName="food" />
-                        <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
+                        <NavItem icon={PlusCircle} label="Alimentos" viewName="database" />
                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                         <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">
                            {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}
@@ -1397,10 +1439,6 @@ export default function App() {
                     </div>
                 </nav>
                 <main className="flex-1 p-4 sm:p-8 pb-24 sm:pb-8">
-                    <div className="mb-8">
-                        <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
-                        <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
-                    </div>
                     {renderView()}
                 </main>
              </div>
