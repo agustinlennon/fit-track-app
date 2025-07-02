@@ -47,7 +47,7 @@ if (!firebaseConfig) {
 
 if (!GEMINI_API_KEY) {
     console.warn("Gemini API Key not found via global variables. Using hardcoded placeholder.");
-    GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
+    GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
 }
 
 const app = initializeApp(firebaseConfig);
