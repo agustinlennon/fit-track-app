@@ -131,15 +131,17 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const today = new Date().toISOString().slice(0, 10);
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
+  
+  const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+  const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
+  const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
+
 
   useEffect(() => {
-    if (!userData || !userData.workoutSchedule) return;
+    if (!userData) return;
 
     const getAiRecommendation = async () => {
         setAiRecommendation({ text: 'Analizando tu día...', loading: true });
-        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-        const todayWorkouts = userData.workoutSchedule[todayDay] || [];
-        const workoutText = Array.isArray(todayWorkouts) && todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
 
         if (workoutText === 'Descanso') {
             setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
@@ -162,7 +164,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     };
 
     getAiRecommendation();
-  }, [userData]);
+  }, [workoutText, userData.goals]);
 
   const workoutSummary = useMemo(() => {
     const now = new Date();
@@ -188,9 +190,6 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   if (!userData) {
     return <DashboardSkeleton />;
   }
-
-  const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
-  const todaysPlan = userData.workoutSchedule ? (userData.workoutSchedule[todayDay] || []) : [];
 
   const totals = useMemo(() => {
     return (todaysLog.loggedFoods || []).reduce((acc, food) => {
@@ -664,6 +663,11 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
     const [schedule, setSchedule] = useState(userData.workoutSchedule || {});
     const [workoutOptions, setWorkoutOptions] = useState(userData.workoutOptions || []);
     const [newOption, setNewOption] = useState('');
+    const [saveStatus, setSaveStatus] = useState('idle'); // idle, saving, saved
+
+    useEffect(() => {
+        setSchedule(userData.workoutSchedule || {});
+    }, [userData.workoutSchedule]);
 
     const handleScheduleChange = (day, index, field, value) => {
         const newSchedule = JSON.parse(JSON.stringify(schedule));
@@ -699,8 +703,16 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
         }
     };
 
-    const handleSaveChanges = () => {
-        handleUpdateSchedule(schedule);
+    const handleSaveChanges = async () => {
+        setSaveStatus('saving');
+        try {
+            await handleUpdateSchedule(schedule);
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        } catch (error) {
+            console.error("Error saving schedule:", error);
+            setSaveStatus('idle');
+        }
     };
 
     return (
@@ -757,7 +769,9 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
                     </Card>
                 ))}
             </div>
-             <Button onClick={handleSaveChanges} className="w-full mt-6">Guardar Plan Semanal</Button>
+             <Button onClick={handleSaveChanges} disabled={saveStatus === 'saving'} className="w-full mt-6">
+                {saveStatus === 'saving' ? 'Guardando...' : saveStatus === 'saved' ? '¡Guardado!' : 'Guardar Plan Semanal'}
+            </Button>
         </div>
     );
 };
@@ -1258,7 +1272,7 @@ export default function App() {
             
             const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (doc) => {
                 if(doc.exists()){ 
-                    setUserData(doc.data()); 
+                    setUserData({ ...doc.data() }); 
                 } else if (user.isAnonymous) {
                      const initialData = {
                         name: "Invitado",
