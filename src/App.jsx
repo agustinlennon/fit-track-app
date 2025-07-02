@@ -5,33 +5,38 @@ import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, d
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star } from 'lucide-react';
 
+// --- FUNCIÓN AUXILIAR ---
+// Función para quitar tildes y normalizar strings para comparaciones
+const normalizeString = (str) => {
+  if (!str) return '';
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 // --- INICIALIZACIÓN DE FIREBASE Y SERVICIOS ---
 
-// Función para obtener la configuración de Firebase de forma segura para cualquier entorno
-function getFirebaseConfig() {
-  // Prioridad 1: Entorno de Canvas (usando variables globales)
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    try {
-      return JSON.parse(__firebase_config);
-    } catch (e) {
-      console.error("Error parsing __firebase_config:", e);
-    }
-  }
+let firebaseConfig;
+let GEMINI_API_KEY;
 
-  // Prioridad 2: Entorno de Vite (Netlify/GitHub) usando variables de entorno
-  // Se comprueba la existencia de `import.meta` antes de acceder a `env` para evitar errores de compilación.
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FIREBASE_CONFIG) {
-    try {
-      return JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG);
-    } catch (e) {
-      console.error("Error parsing VITE_FIREBASE_CONFIG:", e);
-    }
+// Se prioriza la configuración del entorno de Canvas a través de variables globales.
+if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+  try {
+    firebaseConfig = JSON.parse(__firebase_config);
+  } catch (e) {
+    console.error("Error parsing __firebase_config:", e);
   }
-  
-  // Respaldo si no se encuentra ninguna configuración
-  console.warn("Firebase config not found. Using fallback. Set up your environment variables.");
-  return {
-  apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
+}
+
+if (typeof __gemini_api_key !== 'undefined') {
+    GEMINI_API_KEY = __gemini_api_key;
+}
+
+// Si las variables globales no existen, se usan valores de respaldo.
+// Para el deploy en Netlify, DEBES reemplazar estos valores por los tuyos.
+// Puedes hacerlo manualmente o usando variables de entorno en Netlify.
+if (!firebaseConfig) {
+  console.warn("Firebase config not found via global variables. Using hardcoded placeholders.");
+  firebaseConfig = {
+   apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
   authDomain: "fit-track-app-final.firebaseapp.com",
   projectId: "fit-track-app-final",
   storageBucket: "fit-track-app-final.firebasestorage.app",
@@ -40,22 +45,10 @@ function getFirebaseConfig() {
   };
 }
 
-// Función para obtener la clave de API de Gemini de forma segura
-function getGeminiApiKey() {
-    // Prioridad 1: Entorno de Canvas
-    if (typeof __gemini_api_key !== 'undefined') {
-        return __gemini_api_key;
-    }
-    // Prioridad 2: Entorno de Vite
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-        return import.meta.env.VITE_GEMINI_API_KEY;
-    }
-    console.warn("Gemini API Key not found in environment.");
-    return ""; // Usar clave vacía si no se encuentra
+if (!GEMINI_API_KEY) {
+    console.warn("Gemini API Key not found via global variables. Using hardcoded placeholder.");
+    GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
 }
-
-const firebaseConfig = getFirebaseConfig();
-const GEMINI_API_KEY = getGeminiApiKey();
 
 const app = initializeApp(firebaseConfig);
 const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
@@ -169,7 +162,9 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+  // CORRECCIÓN: Normalizar el día de la semana para que coincida con las claves del planificador
+  const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
+  
   const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
   const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
 
@@ -1298,8 +1293,8 @@ export default function App() {
                 // Lógica de autenticación específica para el entorno de Canvas
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
-                } else if (typeof import.meta === 'undefined') {
-                    // Si no es Vite/Netlify y no hay token, usar anónimo (para Canvas)
+                } else if (typeof __firebase_config !== 'undefined') {
+                    // Si __firebase_config existe, estamos en Canvas, usar anónimo
                     await signInAnonymously(auth);
                 }
                 // En Netlify, la autenticación se manejará por separado o se esperará la acción del usuario
@@ -1417,11 +1412,9 @@ export default function App() {
         setBodyMeasurements([]);
         setCompletedWorkouts([]);
         setCurrentAiRoutine([]);
-        // Forzar un re-login anónimo para usuarios no registrados
-        if (typeof import.meta !== 'undefined') {
-            // No hacer nada especial en Netlify, el usuario debe volver a iniciar sesión
-        } else {
-            await signInAnonymously(auth);
+        // Forzar un re-login anónimo para usuarios no registrados en el entorno de Canvas
+        if (typeof __firebase_config !== 'undefined') {
+             await signInAnonymously(auth);
         }
     };
 
