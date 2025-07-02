@@ -1,29 +1,29 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star } from 'lucide-react';
 
 // --- INICIALIZACIÓN DE FIREBASE ---
-function initializeFirebase() {
-  try {
-    const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
-    if (!firebaseConfigString) {
-      console.error("Firebase config not found. Please set it up in your environment.");
-      return null;
-    }
-    const firebaseConfig = JSON.parse(firebaseConfigString);
-    const app = initializeApp(firebaseConfig);
-    return { app, config: firebaseConfig };
-  } catch (error) {
-    console.error("Error initializing Firebase:", error);
-    return null;
-  }
-}
+// La configuración de Firebase ahora se carga dinámicamente desde el entorno.
+const firebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
+  ? JSON.parse(__firebase_config)
+  : {
+  apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
+  authDomain: "fit-track-app-final.firebaseapp.com",
+  projectId: "fit-track-app-final",
+  storageBucket: "fit-track-app-final.firebasestorage.app",
+  messagingSenderId: "319971791213",
+  appId: "1:319971791213:web:6921580a6072b322694a64"
+    };
 
-const firebaseData = initializeFirebase();
-const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
+// La clave de API de Gemini ahora es manejada por el entorno.
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+const app = initializeApp(firebaseConfig);
+const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
+
 
 // --- SERVICIO CENTRALIZADO PARA LA API DE GEMINI ---
 const parseJsonFromMarkdown = (text) => {
@@ -41,12 +41,12 @@ const parseJsonFromMarkdown = (text) => {
 };
 
 const callGeminiAPI = async (prompt, generationConfig = null) => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
   if (generationConfig) {
     payload.generationConfig = generationConfig;
   }
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  // Se actualiza al modelo recomendado y se usa la clave de API del entorno.
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -55,6 +55,8 @@ const callGeminiAPI = async (prompt, generationConfig = null) => {
   });
 
   if (!response.ok) {
+    const errorBody = await response.text();
+    console.error("API call failed response:", errorBody);
     throw new Error(`API call failed: ${response.status} ${response.statusText}`);
   }
 
@@ -138,7 +140,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
 
 
   useEffect(() => {
-    if (!userData) return;
+    if (!userData || !userData.goals) return;
 
     const getAiRecommendation = async () => {
         setAiRecommendation({ text: 'Analizando tu día...', loading: true });
@@ -164,7 +166,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     };
 
     getAiRecommendation();
-  }, [workoutText, userData.goals]);
+  }, [workoutText, userData]);
 
   const workoutSummary = useMemo(() => {
     const now = new Date();
@@ -1240,43 +1242,60 @@ export default function App() {
     const [currentAiRoutine, setCurrentAiRoutine] = useState([]);
 
     useEffect(() => {
-        if(firebaseData) {
-            const { app } = firebaseData;
-            const auth = getAuth(app);
-            const db = getFirestore(app);
-            setFirebaseServices({ auth, db, app });
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        setFirebaseServices({ auth, db, app });
 
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    setUser(user);
-                } else {
-                    await signInAnonymously(auth).catch(err => console.error("Anonymous sign in failed:", err));
-                }
+        const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+            setUser(user);
+            if (!isAuthReady) {
                 setIsAuthReady(true);
-            });
-        } else {
-             setIsAuthReady(true);
-        }
+            }
+        });
+
+        (async () => {
+            try {
+                if (auth.currentUser) {
+                    setIsAuthReady(true);
+                    return;
+                }
+                
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Automatic sign-in failed:", error);
+                setIsAuthReady(true);
+            }
+        })();
+
+        return () => {
+            authUnsubscribe();
+        };
     }, []);
 
     const handleAddFoodToDb = useCallback(async (foodData) => {
         if (!firebaseServices || !user) return;
         const { db } = firebaseServices;
-        await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/foodDatabase`), foodData);
+        const userId = user.uid;
+        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
     }, [firebaseServices, user]);
 
     useEffect(() => {
         if (isAuthReady && firebaseServices && user) {
             const { db } = firebaseServices;
-            const userDocPath = `artifacts/${appId}/users/${user.uid}`;
+            const userId = user.uid;
+            const userDocPath = `artifacts/${appId}/users/${userId}`;
             
-            const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (doc) => {
-                if(doc.exists()){ 
-                    setUserData({ ...doc.data() }); 
-                } else if (user.isAnonymous) {
+            const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (docSnapshot) => {
+                if(docSnapshot.exists()){ 
+                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() }); 
+                } else {
                      const initialData = {
-                        name: "Invitado",
-                        email: null,
+                        name: user.isAnonymous ? "Invitado" : user.displayName || "Atleta",
+                        email: user.email,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
                         workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
                         favoriteExercises: [],
@@ -1286,7 +1305,7 @@ export default function App() {
                             viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
                         }
                     };
-                    setDoc(doc.ref, initialData);
+                    setDoc(docSnapshot.ref, initialData).then(() => setUserData(initialData));
                 }
             });
 
@@ -1310,6 +1329,7 @@ export default function App() {
         const { auth, db } = firebaseServices;
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
+        const userId = user.uid;
         const initialData = {
             name: name,
             email: user.email,
@@ -1322,7 +1342,7 @@ export default function App() {
                 viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
             }
         };
-        await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`), initialData);
+        await setDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), initialData);
     };
 
     const handleLogin = async (email, password) => {
@@ -1337,7 +1357,8 @@ export default function App() {
         try {
             const userCredential = await linkWithCredential(auth.currentUser, credential);
             const newUser = userCredential.user;
-            await setDoc(doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`), {
+            const userId = newUser.uid;
+            await setDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), {
                 name: name,
                 email: newUser.email,
             }, { merge: true });
@@ -1360,7 +1381,25 @@ export default function App() {
     };
 
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
-    const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutSchedule: newSchedule }); };
+    
+    const handleUpdateSchedule = async (newSchedule) => {
+        if (!firebaseServices || !user || !userData) return;
+
+        const previousUserData = userData;
+        setUserData(prevData => ({
+            ...prevData,
+            workoutSchedule: newSchedule
+        }));
+
+        try {
+            const userDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`);
+            await updateDoc(userDocRef, { workoutSchedule: newSchedule });
+        } catch (error) {
+            console.error("Error al guardar el plan semanal, revirtiendo cambios locales.", error);
+            setUserData(previousUserData);
+        }
+    };
+
     const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutOptions: newOptions }); };
     const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, user]);
     const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
