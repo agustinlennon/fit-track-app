@@ -1,56 +1,29 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star } from 'lucide-react';
 
-// --- FUNCIÓN AUXILIAR ---
-// Función para quitar tildes y normalizar strings para comparaciones
-const normalizeString = (str) => {
-  if (!str) return '';
-  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-// --- INICIALIZACIÓN DE FIREBASE Y SERVICIOS ---
-
-let firebaseConfig;
-let GEMINI_API_KEY;
-
-// Lógica de inicialización compatible con Canvas y Netlify sin usar ternarios a nivel superior.
-if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-  // Entorno de Canvas: Usa la configuración inyectada.
+// --- INICIALIZACIÓN DE FIREBASE ---
+function initializeFirebase() {
   try {
-    firebaseConfig = JSON.parse(__firebase_config);
-  } catch (e) {
-    console.error("Error parsing __firebase_config:", e);
-    firebaseConfig = {}; // Fallback en caso de error
+    const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
+    if (!firebaseConfigString) {
+      console.error("Firebase config not found. Please set it up in your environment.");
+      return null;
+    }
+    const firebaseConfig = JSON.parse(firebaseConfigString);
+    const app = initializeApp(firebaseConfig);
+    return { app, config: firebaseConfig };
+  } catch (error) {
+    console.error("Error initializing Firebase:", error);
+    return null;
   }
-} else {
-  // Entorno de Netlify/Local: Usa los valores hardcodeados.
-  // Asegúrate de que estos valores son correctos para tu proyecto.
-  firebaseConfig = {
-      apiKey: "AIzaSyBgJN1vtmv7-cMKASPUXGzCFsvZc72bA4",
-      authDomain: "fit-track-app-final.firebaseapp.com",
-      projectId: "fit-track-app-final",
-      storageBucket: "fit-track-app-final.firebaseappstorage.com",
-      messagingSenderId: "319971791213",
-      appId: "1:319971791213:web:6921580a6072b322694a64"
-  };
 }
 
-if (typeof __gemini_api_key !== 'undefined') {
-  // Entorno de Canvas: Usa la clave de Gemini inyectada.
-  GEMINI_API_KEY = __gemini_api_key;
-} else {
-  // Entorno de Netlify/Local: Usa tu clave de Gemini.
-  // ¡IMPORTANTE! Reemplaza "YOUR_GEMINI_API_KEY" con tu clave real.
-  GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw";
-}
-
-const app = initializeApp(firebaseConfig);
-const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
-
+const firebaseData = initializeFirebase();
+const appId = firebaseData ? firebaseData.config.appId : 'default-app-id';
 
 // --- SERVICIO CENTRALIZADO PARA LA API DE GEMINI ---
 const parseJsonFromMarkdown = (text) => {
@@ -68,18 +41,11 @@ const parseJsonFromMarkdown = (text) => {
 };
 
 const callGeminiAPI = async (prompt, generationConfig = null) => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
   if (generationConfig) {
     payload.generationConfig = generationConfig;
   }
-  
-  let apiKey = GEMINI_API_KEY;
-  // Si la clave es el valor por defecto (placeholder), se usa una cadena vacía
-  // para que el entorno de Canvas pueda inyectar la clave correcta automáticamente.
-  if (apiKey === "YOUR_GEMINI_API_KEY") {
-    apiKey = "";
-  }
-
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(apiUrl, {
@@ -89,8 +55,6 @@ const callGeminiAPI = async (prompt, generationConfig = null) => {
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("API call failed response:", errorBody);
     throw new Error(`API call failed: ${response.status} ${response.statusText}`);
   }
 
@@ -168,15 +132,13 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  // CORRECCIÓN: Normalizar el día de la semana para que coincida con las claves del planificador
-  const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
-  
+  const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
   const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
   const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
 
 
   useEffect(() => {
-    if (!userData || !userData.goals) return;
+    if (!userData) return;
 
     const getAiRecommendation = async () => {
         setAiRecommendation({ text: 'Analizando tu día...', loading: true });
@@ -202,7 +164,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     };
 
     getAiRecommendation();
-  }, [workoutText, userData]);
+  }, [workoutText, userData.goals]);
 
   const workoutSummary = useMemo(() => {
     const now = new Date();
@@ -919,37 +881,21 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         setError('');
 
         const historySummary = Array.isArray(completedWorkouts) ? completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
-        const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
+        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
         const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.join(', ')}. Intenta incluirlos si son apropiados.` : '';
 
-        const prompt = `
-            Eres un entrenador personal de IA. Tu tarea es crear una rutina de ejercicios detallada para un usuario.
+        const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
+            Mi plan para hoy es: ${todayWorkoutText}.
+            Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}".
+            Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros.
+            Mi nivel de energía hoy es: ${fatigueLevel}.
+            Mi historial reciente es: ${historySummary || 'ninguno'}.
+            ${favoriteExercisesText}
             
-            **Información del Usuario:**
-            - Nombre: ${userData.name}
-            - Objetivos: Ganar masa muscular y mantenerme saludable.
-            - Nivel de energía hoy: ${fatigueLevel}.
-            - Historial reciente (últimos 5 entrenos): ${historySummary || 'ninguno'}.
-            - Ejercicios favoritos: ${favoriteExercisesText || 'ninguno'}.
-
-            **Instrucciones para la Rutina de Hoy:**
-            1.  **Plan Base del Calendario:** El plan para hoy es: **${todayWorkoutText}**. Este es el punto de partida.
-            2.  **Ajustes del Usuario (¡Prioridad Máxima!):** El usuario ha añadido estas notas para hoy: **"${userNotes || 'Ninguna'}"**.
-            
-            **Tu Tarea:**
-            - Combina el "Plan Base" con los "Ajustes del Usuario".
-            - **Si las notas del usuario contradicen el plan (ej: el plan es 'Piernas' pero las notas dicen 'quiero hacer pecho'), las notas del usuario TIENEN PRIORIDAD ABSOLUTA.**
-            - Si las notas son un complemento (ej: el plan es 'Tren Superior' y las notas dicen 'con énfasis en bíceps'), crea una rutina que cumpla con ambos.
-            - Si no hay notas, simplemente sigue el "Plan Base".
-            - Considera el historial para evitar sobreentrenamiento y asegurar una buena rotación muscular.
-            - Si es posible, incluye ejercicios favoritos si encajan en la rutina.
-
-            **Formato de Respuesta (JSON Obligatorio):**
-            Genera una respuesta en formato JSON. Para cada ejercicio, proporciona: name, sets, reps, weight (sugiere un peso inicial o "peso corporal"), videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.
-            Responde SIEMPRE en español.
-            `;
+            Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy.
+            IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
         
         const generationConfig = {
             responseMimeType: "application/json",
@@ -1294,64 +1240,43 @@ export default function App() {
     const [currentAiRoutine, setCurrentAiRoutine] = useState([]);
 
     useEffect(() => {
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        setFirebaseServices({ auth, db, app });
+        if(firebaseData) {
+            const { app } = firebaseData;
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            setFirebaseServices({ auth, db, app });
 
-        const authUnsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-            if (!isAuthReady) {
-                setIsAuthReady(true);
-            }
-        });
-
-        (async () => {
-            try {
-                if (auth.currentUser) {
-                    setIsAuthReady(true);
-                    return;
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    setUser(user);
+                } else {
+                    await signInAnonymously(auth).catch(err => console.error("Anonymous sign in failed:", err));
                 }
-                
-                // Lógica de autenticación específica para el entorno de Canvas
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else if (typeof __firebase_config !== 'undefined') {
-                    // Si __firebase_config existe, estamos en Canvas, usar anónimo
-                    await signInAnonymously(auth);
-                }
-                // En Netlify, la autenticación se manejará por separado o se esperará la acción del usuario
-            } catch (error) {
-                console.error("Automatic sign-in failed:", error);
-            } finally {
                 setIsAuthReady(true);
-            }
-        })();
-
-        return () => {
-            authUnsubscribe();
-        };
+            });
+        } else {
+             setIsAuthReady(true);
+        }
     }, []);
 
     const handleAddFoodToDb = useCallback(async (foodData) => {
         if (!firebaseServices || !user) return;
         const { db } = firebaseServices;
-        const userId = user.uid;
-        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
+        await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/foodDatabase`), foodData);
     }, [firebaseServices, user]);
 
     useEffect(() => {
         if (isAuthReady && firebaseServices && user) {
             const { db } = firebaseServices;
-            const userId = user.uid;
-            const userDocPath = `artifacts/${appId}/users/${userId}`;
+            const userDocPath = `artifacts/${appId}/users/${user.uid}`;
             
-            const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (docSnapshot) => {
-                if(docSnapshot.exists()){ 
-                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() }); 
-                } else {
+            const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (doc) => {
+                if(doc.exists()){ 
+                    setUserData({ ...doc.data() }); 
+                } else if (user.isAnonymous) {
                      const initialData = {
-                        name: user.isAnonymous ? "Invitado" : user.displayName || "Atleta",
-                        email: user.email,
+                        name: "Invitado",
+                        email: null,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
                         workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
                         favoriteExercises: [],
@@ -1361,7 +1286,7 @@ export default function App() {
                             viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
                         }
                     };
-                    setDoc(docSnapshot.ref, initialData).then(() => setUserData(initialData));
+                    setDoc(doc.ref, initialData);
                 }
             });
 
@@ -1385,7 +1310,6 @@ export default function App() {
         const { auth, db } = firebaseServices;
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        const userId = user.uid;
         const initialData = {
             name: name,
             email: user.email,
@@ -1398,7 +1322,7 @@ export default function App() {
                 viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
             }
         };
-        await setDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), initialData);
+        await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`), initialData);
     };
 
     const handleLogin = async (email, password) => {
@@ -1413,8 +1337,7 @@ export default function App() {
         try {
             const userCredential = await linkWithCredential(auth.currentUser, credential);
             const newUser = userCredential.user;
-            const userId = newUser.uid;
-            await setDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), {
+            await setDoc(doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`), {
                 name: name,
                 email: newUser.email,
             }, { merge: true });
@@ -1434,32 +1357,10 @@ export default function App() {
         setBodyMeasurements([]);
         setCompletedWorkouts([]);
         setCurrentAiRoutine([]);
-        // Forzar un re-login anónimo para usuarios no registrados en el entorno de Canvas
-        if (typeof __firebase_config !== 'undefined') {
-             await signInAnonymously(auth);
-        }
     };
 
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
-    
-    const handleUpdateSchedule = async (newSchedule) => {
-        if (!firebaseServices || !user || !userData) return;
-
-        const previousUserData = userData;
-        setUserData(prevData => ({
-            ...prevData,
-            workoutSchedule: newSchedule
-        }));
-
-        try {
-            const userDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`);
-            await updateDoc(userDocRef, { workoutSchedule: newSchedule });
-        } catch (error) {
-            console.error("Error al guardar el plan semanal, revirtiendo cambios locales.", error);
-            setUserData(previousUserData);
-        }
-    };
-
+    const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutSchedule: newSchedule }); };
     const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutOptions: newOptions }); };
     const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, user]);
     const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
