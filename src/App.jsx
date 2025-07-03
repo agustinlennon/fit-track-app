@@ -168,7 +168,6 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  // CORRECCIÓN: Normalizar el día de la semana para que coincida con las claves del planificador
   const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
   
   const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
@@ -1312,18 +1311,17 @@ export default function App() {
                     return;
                 }
                 
-                // Lógica de autenticación específica para el entorno de Canvas
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
-                } else if (typeof __firebase_config !== 'undefined') {
-                    // Si __firebase_config existe, estamos en Canvas, usar anónimo
+                } else {
                     await signInAnonymously(auth);
                 }
-                // En Netlify, la autenticación se manejará por separado o se esperará la acción del usuario
             } catch (error) {
                 console.error("Automatic sign-in failed:", error);
             } finally {
-                setIsAuthReady(true);
+                if (!isAuthReady) {
+                    setIsAuthReady(true);
+                }
             }
         })();
 
@@ -1558,3 +1556,4 @@ export default function App() {
         </div>
     );
 }
+
