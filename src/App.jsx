@@ -76,7 +76,7 @@ const callGeminiAPI = async (prompt, generationConfig = null) => {
   let apiKey = GEMINI_API_KEY;
   // Si la clave es el valor por defecto (placeholder), se usa una cadena vacía
   // para que el entorno de Canvas pueda inyectar la clave correcta automáticamente.
-  if (apiKey === "YOUR_GEMINI_API_KEY") {
+  if (apiKey === "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw") {
     apiKey = "";
   }
 
