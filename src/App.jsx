@@ -16,27 +16,34 @@ const normalizeString = (str) => {
 
 let firebaseConfig;
 let GEMINI_API_KEY;
+let isFirebaseConfigured = false;
+let app;
 
 // Lógica de inicialización compatible con Canvas y Netlify.
 if (typeof __firebase_config !== 'undefined' && __firebase_config) {
   // Entorno de Canvas: Usa la configuración inyectada.
   try {
     firebaseConfig = JSON.parse(__firebase_config);
+    isFirebaseConfigured = true;
   } catch (e) {
     console.error("Error parsing __firebase_config:", e);
     firebaseConfig = {}; // Fallback en caso de error
   }
 } else {
   // Entorno de Netlify/Local: Usa los valores hardcodeados.
-  // Asegúrate de que estos valores son correctos para tu proyecto.
-  firebaseConfig = {
-      apiKey: "AIzaSyBgJN1vtmv7-cMKASPUXGzCFsvZc72bA4",
-      authDomain: "fit-track-app-final.firebaseapp.com",
-      projectId: "fit-track-app-final",
-      storageBucket: "fit-track-app-final.firebaseappstorage.com",
-      messagingSenderId: "319971791213",
-      appId: "1:319971791213:web:6921580a6072b322694a64"
-  };
+  // ¡¡¡IMPORTANTE!!! Reemplaza "YOUR_FIREBASE_API_KEY" con tu clave real.
+  const apiKey = "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4"; 
+  if (apiKey !== "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4") {
+      firebaseConfig = {
+          apiKey: apiKey,
+          authDomain: "fit-track-app-final.firebaseapp.com",
+          projectId: "fit-track-app-final",
+          storageBucket: "fit-track-app-final.appspot.com",
+          messagingSenderId: "319971791213",
+          appId: "1:319971791213:web:6921580a6072b322694a64"
+      };
+      isFirebaseConfigured = true;
+  }
 }
 
 if (typeof __gemini_api_key !== 'undefined') {
@@ -48,8 +55,11 @@ if (typeof __gemini_api_key !== 'undefined') {
   GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw";
 }
 
-const app = initializeApp(firebaseConfig);
-const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
+if(isFirebaseConfigured){
+    app = initializeApp(firebaseConfig);
+}
+
+const appId = isFirebaseConfigured ? firebaseConfig.appId : 'default-app-id';
 
 
 // --- SERVICIO CENTRALIZADO PARA LA API DE GEMINI ---
@@ -1293,6 +1303,8 @@ export default function App() {
     const [currentAiRoutine, setCurrentAiRoutine] = useState([]);
 
     useEffect(() => {
+        if (!isFirebaseConfigured) return;
+
         const auth = getAuth(app);
         const db = getFirestore(app);
         setFirebaseServices({ auth, db, app });
@@ -1490,6 +1502,18 @@ export default function App() {
     };
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
+
+    if (!isFirebaseConfigured) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                <div className="text-center p-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md">
+                    <h1 className="text-2xl font-bold text-red-500 mb-4">Error de Configuración</h1>
+                    <p className="text-lg">La clave de API de Firebase no está configurada correctamente.</p>
+                    <p className="mt-2 text-gray-600 dark:text-gray-400">Por favor, edita el código y reemplaza el valor de `YOUR_FIREBASE_API_KEY` con tu clave real de Firebase para que la aplicación funcione.</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!isAuthReady || !firebaseServices || !user || !userData) {
         return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Inicializando FitTrack AI...</p></div></div>;
