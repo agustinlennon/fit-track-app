@@ -154,7 +154,6 @@ const DashboardSkeleton = () => (
 
 const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFood }) => {
   const [timeFilter, setTimeFilter] = useState('week');
-  // --- SOLUCIÓN ERROR 429: Estado inicial modificado ---
   const [aiRecommendation, setAiRecommendation] = useState({ text: 'Obtén una recomendación de nutrición para tu entrenamiento de hoy.', loading: false });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -165,7 +164,6 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
   const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
 
-  // --- SOLUCIÓN ERROR 429: La llamada a la IA ahora es manual ---
   const getAiRecommendation = async () => {
     if (!userData || !userData.goals) return;
 
@@ -273,7 +271,6 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
               {aiRecommendation.text}
             </p>
           </div>
-          {/* --- SOLUCIÓN ERROR 429: Botón para generar recomendación manualmente --- */}
           <Button onClick={getAiRecommendation} disabled={aiRecommendation.loading} className="w-full mt-4">
             <Sparkles size={18}/> 
             {aiRecommendation.loading ? 'Analizando...' : 'Generar Recomendación'}
@@ -600,7 +597,6 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
     const [goals, setGoals] = useState(userData?.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
     const [objectivePrompt, setObjectivePrompt] = useState(userData?.objectivePrompt || '');
     
-    // --- MEJORA DE UX: Estado para el feedback del botón de guardar prompt ---
     const [objectiveSaveStatus, setObjectiveSaveStatus] = useState('idle'); // 'idle', 'saving', 'saved'
 
     useEffect(() => {
@@ -637,14 +633,13 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
         handleUpdateGoals(goals);
     };
 
-    // --- MEJORA DE UX: Lógica de guardado con feedback visual ---
     const handleObjectiveSubmit = async (e) => {
         e.preventDefault();
         setObjectiveSaveStatus('saving');
         try {
             await handleUpdateObjective(objectivePrompt);
             setObjectiveSaveStatus('saved');
-            setTimeout(() => setObjectiveSaveStatus('idle'), 2000); // Vuelve al estado inicial después de 2 segundos
+            setTimeout(() => setObjectiveSaveStatus('idle'), 2000);
         } catch (error) {
             console.error("Error saving objective prompt:", error);
             setObjectiveSaveStatus('idle');
@@ -708,7 +703,6 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
                         />
                     </div>
                     <div className="pt-2">
-                        {/* --- MEJORA DE UX: Botón dinámico con feedback --- */}
                         <Button type="submit" className="w-full" disabled={objectiveSaveStatus === 'saving'}>
                             {objectiveSaveStatus === 'idle' && 'Guardar Prompt'}
                             {objectiveSaveStatus === 'saving' && 'Guardando...'}
@@ -1214,44 +1208,40 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
         return Array.isArray(completedWorkouts) ? completedWorkouts.filter(w => new Date(w.date) >= startDate) : [];
     }, [completedWorkouts, timeFilter]);
 
-    useEffect(() => {
+    // --- SOLUCIÓN ERROR 429: La llamada a la IA ahora es manual ---
+    const handleAnalyzeMuscles = async () => {
         if (filteredWorkouts.length === 0) {
             setMuscleData([]);
             return;
         }
+        setLoadingAnalysis(true);
+        const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
+        const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
+        
+        try {
+            const resultText = await callGeminiAPI(prompt);
+            const muscleMap = parseJsonFromMarkdown(resultText);
 
-        const analyzeMuscles = async () => {
-            setLoadingAnalysis(true);
-            const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
-            const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
-            
-            try {
-                const resultText = await callGeminiAPI(prompt);
-                const muscleMap = parseJsonFromMarkdown(resultText);
-
-                const muscleCounts = {};
-                filteredWorkouts.forEach(workout => {
-                    (Array.isArray(workout.exercises) ? workout.exercises : []).forEach(exercise => {
-                        const muscle = muscleMap[exercise.name] || 'Otro';
-                        if (!muscleCounts[muscle]) {
-                            muscleCounts[muscle] = 0;
-                        }
-                        muscleCounts[muscle] += parseInt(exercise.sets, 10) || 0;
-                    });
+            const muscleCounts = {};
+            filteredWorkouts.forEach(workout => {
+                (Array.isArray(workout.exercises) ? workout.exercises : []).forEach(exercise => {
+                    const muscle = muscleMap[exercise.name] || 'Otro';
+                    if (!muscleCounts[muscle]) {
+                        muscleCounts[muscle] = 0;
+                    }
+                    muscleCounts[muscle] += parseInt(exercise.sets, 10) || 0;
                 });
+            });
 
-                setMuscleData(Object.entries(muscleCounts).map(([name, sets]) => ({ name, sets })));
+            setMuscleData(Object.entries(muscleCounts).map(([name, sets]) => ({ name, sets })));
 
-            } catch (error) {
-                console.error("Error analyzing muscles:", error);
-                setMuscleData([]);
-            } finally {
-                setLoadingAnalysis(false);
-            }
-        };
-
-        analyzeMuscles();
-    }, [filteredWorkouts]);
+        } catch (error) {
+            console.error("Error analyzing muscles:", error);
+            setMuscleData([]);
+        } finally {
+            setLoadingAnalysis(false);
+        }
+    };
 
     return (
         <div>
@@ -1269,18 +1259,26 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
                         <button onClick={() => setTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
                     </div>
                 </div>
-                {loadingAnalysis ? <p className="text-center animate-pulse">Analizando...</p> : 
-                <div className="h-60">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={muscleData}>
-                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                            <XAxis dataKey="name" fontSize={12} />
-                            <YAxis />
-                            <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
-                            <Bar dataKey="sets" name="Series totales" fill="#3b82f6" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>}
+                {/* --- SOLUCIÓN ERROR 429: Se añade un botón para el análisis manual --- */}
+                <div className="mb-4">
+                    <Button onClick={handleAnalyzeMuscles} disabled={loadingAnalysis} className="w-full">
+                        {loadingAnalysis ? 'Analizando...' : 'Analizar Músculos Trabajados'}
+                    </Button>
+                </div>
+                {loadingAnalysis && <p className="text-center animate-pulse">Analizando...</p>}
+                {muscleData.length > 0 && !loadingAnalysis && (
+                    <div className="h-60">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={muscleData}>
+                                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                <XAxis dataKey="name" fontSize={12} />
+                                <YAxis />
+                                <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
+                                <Bar dataKey="sets" name="Series totales" fill="#3b82f6" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
             </Card>
 
             <div className="space-y-4">
