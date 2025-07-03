@@ -45,7 +45,7 @@ if (typeof __gemini_api_key !== 'undefined') {
 } else {
   // Entorno de Netlify/Local: Usa tu clave de Gemini.
   // ¡IMPORTANTE! Reemplaza "YOUR_GEMINI_API_KEY" con tu clave real.
-  GEMINI_API_KEY = "import.meta.env.VITE_GEMINI_API_KEY;";
+  GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw";
 }
 
 const app = initializeApp(firebaseConfig);
