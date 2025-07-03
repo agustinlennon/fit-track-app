@@ -14,41 +14,24 @@ const normalizeString = (str) => {
 
 // --- INICIALIZACIÓN DE FIREBASE Y SERVICIOS ---
 
-let firebaseConfig;
-let GEMINI_API_KEY;
+// Para el entorno de Canvas, las claves se inyectan automáticamente.
+// Para tu deploy en Netlify, asegúrate de que estos valores sean correctos.
+const firebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
+  ? JSON.parse(__firebase_config)
+  : {
+      apiKey: "AIzaSyBgJN1vtmv7-cMKASPUXGzCFsvZc72bA4",
+      authDomain: "fit-track-app-final.firebaseapp.com",
+      projectId: "fit-track-app-final",
+      storageBucket: "fit-track-app-final.firebaseappstorage.com",
+      messagingSenderId: "319971791213",
+      appId: "1:319971791213:web:6921580a6072b322694a64"
+    };
 
-// Se prioriza la configuración del entorno de Canvas a través de variables globales.
-if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-  try {
-    firebaseConfig = JSON.parse(__firebase_config);
-  } catch (e) {
-    console.error("Error parsing __firebase_config:", e);
-  }
-}
-
-if (typeof __gemini_api_key !== 'undefined') {
-    GEMINI_API_KEY = __gemini_api_key;
-}
-
-// Si las variables globales no existen, se usan valores de respaldo.
-// Para el deploy en Netlify, DEBES reemplazar estos valores por los tuyos.
-// Puedes hacerlo manualmente o usando variables de entorno en Netlify.
-if (!firebaseConfig) {
-  console.warn("Firebase config not found via global variables. Using hardcoded placeholders.");
-  firebaseConfig = {
-   apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
-  authDomain: "fit-track-app-final.firebaseapp.com",
-  projectId: "fit-track-app-final",
-  storageBucket: "fit-track-app-final.firebasestorage.app",
-  messagingSenderId: "319971791213",
-  appId: "1:319971791213:web:6921580a6072b322694a64"
-  };
-}
-
-if (!GEMINI_API_KEY) {
-    console.warn("Gemini API Key not found via global variables. Using hardcoded placeholder.");
-    GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
-}
+// Para el entorno de Canvas, la clave se inyecta automáticamente si está vacía.
+// Para tu deploy en Netlify, DEBES reemplazar el valor "YOUR_GEMINI_API_KEY" con tu clave real.
+const GEMINI_API_KEY = typeof __gemini_api_key !== 'undefined'
+  ? __gemini_api_key
+  : import.meta.env.VITE_GEMINI_API_KEY; // <-- ¡REEMPLAZA ESTO PARA NETLIFY!
 
 const app = initializeApp(firebaseConfig);
 const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
@@ -74,7 +57,10 @@ const callGeminiAPI = async (prompt, generationConfig = null) => {
   if (generationConfig) {
     payload.generationConfig = generationConfig;
   }
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // Usar una clave vacía en Canvas permite que el entorno la inyecte.
+  // En Netlify, se debe usar la clave que reemplazaste arriba.
+  const apiKey = GEMINI_API_KEY === "YOUR_GEMINI_API_KEY" ? "" : GEMINI_API_KEY;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -913,21 +899,37 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         setError('');
 
         const historySummary = Array.isArray(completedWorkouts) ? completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
-        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+        const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
         const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.join(', ')}. Intenta incluirlos si son apropiados.` : '';
 
-        const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
-            Mi plan para hoy es: ${todayWorkoutText}.
-            Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}".
-            Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros.
-            Mi nivel de energía hoy es: ${fatigueLevel}.
-            Mi historial reciente es: ${historySummary || 'ninguno'}.
-            ${favoriteExercisesText}
+        const prompt = `
+            Eres un entrenador personal de IA. Tu tarea es crear una rutina de ejercicios detallada para un usuario.
             
-            Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy.
-            IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
+            **Información del Usuario:**
+            - Nombre: ${userData.name}
+            - Objetivos: Ganar masa muscular y mantenerme saludable.
+            - Nivel de energía hoy: ${fatigueLevel}.
+            - Historial reciente (últimos 5 entrenos): ${historySummary || 'ninguno'}.
+            - Ejercicios favoritos: ${favoriteExercisesText || 'ninguno'}.
+
+            **Instrucciones para la Rutina de Hoy:**
+            1.  **Plan Base del Calendario:** El plan para hoy es: **${todayWorkoutText}**. Este es el punto de partida.
+            2.  **Ajustes del Usuario (¡Prioridad Máxima!):** El usuario ha añadido estas notas para hoy: **"${userNotes || 'Ninguna'}"**.
+            
+            **Tu Tarea:**
+            - Combina el "Plan Base" con los "Ajustes del Usuario".
+            - **Si las notas del usuario contradicen el plan (ej: el plan es 'Piernas' pero las notas dicen 'quiero hacer pecho'), las notas del usuario TIENEN PRIORIDAD ABSOLUTA.**
+            - Si las notas son un complemento (ej: el plan es 'Tren Superior' y las notas dicen 'con énfasis en bíceps'), crea una rutina que cumpla con ambos.
+            - Si no hay notas, simplemente sigue el "Plan Base".
+            - Considera el historial para evitar sobreentrenamiento y asegurar una buena rotación muscular.
+            - Si es posible, incluye ejercicios favoritos si encajan en la rutina.
+
+            **Formato de Respuesta (JSON Obligatorio):**
+            Genera una respuesta en formato JSON. Para cada ejercicio, proporciona: name, sets, reps, weight (sugiere un peso inicial o "peso corporal"), videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.
+            Responde SIEMPRE en español.
+            `;
         
         const generationConfig = {
             responseMimeType: "application/json",
