@@ -31,10 +31,7 @@ if (typeof __gemini_api_key !== 'undefined') {
 }
 
 // Si las variables globales no existen, se usan valores de respaldo.
-// Para el deploy en Netlify, DEBES reemplazar estos valores por los tuyos.
-// Puedes hacerlo manually o usando variables de entorno en Netlify.
 if (!firebaseConfig) {
-  console.warn("Firebase config not found via global variables. Using hardcoded placeholders.");
   firebaseConfig = {
    apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
   authDomain: "fit-track-app-final.firebaseapp.com",
@@ -45,10 +42,8 @@ if (!firebaseConfig) {
   };
 }
 
-// CORRECCIÓN: Se elimina `import.meta.env` para evitar errores de compilación.
 // Reemplaza "YOUR_GEMINI_API_KEY_HERE" con tu clave de API si no usas variables de entorno.
 if (!GEMINI_API_KEY) {
-    console.warn("Gemini API Key not found via global variables. Using hardcoded placeholder.");
     GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw"; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
 }
 
@@ -159,7 +154,8 @@ const DashboardSkeleton = () => (
 
 const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFood }) => {
   const [timeFilter, setTimeFilter] = useState('week');
-  const [aiRecommendation, setAiRecommendation] = useState({ text: 'Analizando tu día...', loading: true });
+  // --- SOLUCIÓN ERROR 429: Estado inicial modificado ---
+  const [aiRecommendation, setAiRecommendation] = useState({ text: 'Obtén una recomendación de nutrición para tu entrenamiento de hoy.', loading: false });
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
@@ -169,38 +165,31 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
   const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
 
-  // --- CORRECCIÓN DE ERROR 429 ---
-  // Se refina la dependencia del `useEffect` para evitar llamadas innecesarias a la API.
-  // Ahora solo se ejecutará si cambia el plan del día (`workoutText`) o las metas calóricas,
-  // pero no por otros cambios en el perfil del usuario como el `objectivePrompt`.
-  useEffect(() => {
+  // --- SOLUCIÓN ERROR 429: La llamada a la IA ahora es manual ---
+  const getAiRecommendation = async () => {
     if (!userData || !userData.goals) return;
 
-    const getAiRecommendation = async () => {
-        setAiRecommendation({ text: 'Analizando tu día...', loading: true });
+    setAiRecommendation({ text: 'Analizando tu día...', loading: true });
 
-        if (workoutText === 'Descanso') {
-            setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
-            return;
-        }
+    if (workoutText === 'Descanso') {
+        setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
+        return;
+    }
 
-        try {
-            const caloriePrompt = `Estima las calorías totales quemadas para el siguiente plan de entrenamiento: "${workoutText}". Responde solo con un número (ej: 450).`;
-            const estimatedCaloriesText = await callGeminiAPI(caloriePrompt);
-            const estimatedCalories = parseInt(estimatedCaloriesText.match(/\d+/)[0], 10) || 0;
+    try {
+        const caloriePrompt = `Estima las calorías totales quemadas para el siguiente plan de entrenamiento: "${workoutText}". Responde solo con un número (ej: 450).`;
+        const estimatedCaloriesText = await callGeminiAPI(caloriePrompt);
+        const estimatedCalories = parseInt(estimatedCaloriesText.match(/\d+/)[0], 10) || 0;
 
-            const foodPrompt = `Mi objetivo de calorías diario es ${userData.goals.calories} kcal. Hoy voy a realizar un entrenamiento (${workoutText}) donde se estima que quemaré ${estimatedCalories} kcal adicionales. Basado en esto, ¿cuál debería ser mi ingesta calórica total hoy? Además, sugiere una comida post-entrenamiento rica en proteínas y carbohidratos para ayudar a la recuperación. Responde en español, de forma concisa y amigable.`;
-            const recommendationText = await callGeminiAPI(foodPrompt);
-            setAiRecommendation({ text: recommendationText, loading: false });
+        const foodPrompt = `Mi objetivo de calorías diario es ${userData.goals.calories} kcal. Hoy voy a realizar un entrenamiento (${workoutText}) donde se estima que quemaré ${estimatedCalories} kcal adicionales. Basado en esto, ¿cuál debería ser mi ingesta calórica total hoy? Además, sugiere una comida post-entrenamiento rica en proteínas y carbohidratos para ayudar a la recuperación. Responde en español, de forma concisa y amigable.`;
+        const recommendationText = await callGeminiAPI(foodPrompt);
+        setAiRecommendation({ text: recommendationText, loading: false });
 
-        } catch (error) {
-            console.error("Error fetching AI recommendation:", error);
-            setAiRecommendation({ text: 'No se pudo obtener la recomendación. Intenta más tarde.', loading: false });
-        }
-    };
-
-    getAiRecommendation();
-  }, [workoutText, userData?.goals?.calories]);
+    } catch (error) {
+        console.error("Error fetching AI recommendation:", error);
+        setAiRecommendation({ text: 'No se pudo obtener la recomendación. Intenta más tarde.', loading: false });
+    }
+  };
 
   const workoutSummary = useMemo(() => {
     const now = new Date();
@@ -277,11 +266,18 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
             <Sparkles size={18}/> Iniciar Rutina con IA
           </Button>
         </Card>
-        <Card className="md:col-span-2">
-          <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación de la IA</h3>
-          <p className={`mt-2 text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
-            {aiRecommendation.text}
-          </p>
+        <Card className="md:col-span-2 flex flex-col justify-between">
+          <div>
+            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación de la IA</h3>
+            <p className={`mt-2 text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
+              {aiRecommendation.text}
+            </p>
+          </div>
+          {/* --- SOLUCIÓN ERROR 429: Botón para generar recomendación manualmente --- */}
+          <Button onClick={getAiRecommendation} disabled={aiRecommendation.loading} className="w-full mt-4">
+            <Sparkles size={18}/> 
+            {aiRecommendation.loading ? 'Analizando...' : 'Generar Recomendación'}
+          </Button>
         </Card>
       </div>
 
