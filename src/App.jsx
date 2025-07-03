@@ -602,17 +602,22 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
     );
 };
 
-const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleRegister, handleLogout, handleUpdateGoals }) => {
+// --- MODIFICACIÓN 1: Añadir `handleUpdateObjective` a las props del componente ---
+const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleRegister, handleLogout, handleUpdateGoals, handleUpdateObjective }) => {
     const [authMode, setAuthMode] = useState('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     const [goals, setGoals] = useState(userData?.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
+    // --- MODIFICACIÓN 2: Añadir estado para el prompt de objetivos ---
+    const [objectivePrompt, setObjectivePrompt] = useState(userData?.objectivePrompt || '');
 
     useEffect(() => {
         if (userData?.goals) setGoals(userData.goals);
         if (userData?.name && !user.isAnonymous) setName(userData.name);
+        // Sincronizar el estado local si los datos de Firebase cambian
+        if (userData?.objectivePrompt) setObjectivePrompt(userData.objectivePrompt);
     }, [userData, user]);
 
     const handleSubmit = async (e) => {
@@ -641,6 +646,12 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
     const handleGoalsSubmit = (e) => {
         e.preventDefault();
         handleUpdateGoals(goals);
+    };
+
+    // --- MODIFICACIÓN 3: Handler para guardar el nuevo prompt ---
+    const handleObjectiveSubmit = (e) => {
+        e.preventDefault();
+        handleUpdateObjective(objectivePrompt);
     };
 
     if (user && user.isAnonymous) {
@@ -685,6 +696,27 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
                     <LogOut size={18} /> Cerrar Sesión
                 </Button>
             </Card>
+            
+            {/* --- MODIFICACIÓN 4: Añadir la nueva tarjeta para el prompt de la IA --- */}
+            <Card>
+                <form onSubmit={handleObjectiveSubmit} className="space-y-4">
+                    <h3 className="font-bold text-lg mb-2">Objetivos para la IA</h3>
+                    <div>
+                        <label htmlFor="objectivePrompt" className="block text-sm font-medium text-gray-600 dark:text-gray-300">Describe tus metas principales (ej: ganar masa muscular, perder peso, mejorar resistencia, etc.)</label>
+                        <textarea 
+                            id="objectivePrompt"
+                            value={objectivePrompt} 
+                            onChange={e => setObjectivePrompt(e.target.value)} 
+                            className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" 
+                            rows="3"
+                        />
+                    </div>
+                    <div className="pt-2">
+                        <Button type="submit" className="w-full">Guardar Prompt</Button>
+                    </div>
+                </form>
+            </Card>
+
             <Card>
                 <form onSubmit={handleGoalsSubmit} className="space-y-4">
                     <h3 className="font-bold text-lg mb-2">Objetivos Nutricionales Diarios</h3>
@@ -933,8 +965,11 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
         const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.join(', ')}. Intenta incluirlos si son apropiados.` : '';
+        
+        // --- MODIFICACIÓN 5: Usar el prompt de objetivos dinámico ---
+        const objectivePromptText = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
 
-        const prompt = `Hola, soy ${userData.name}. Mis objetivos son ganar masa muscular y mantenerme saludable.
+        const prompt = `Hola, soy ${userData.name}. ${objectivePromptText}
             Mi plan para hoy es: ${todayWorkoutText}.
             Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}".
             Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros.
@@ -1347,6 +1382,8 @@ export default function App() {
                         name: user.isAnonymous ? "Invitado" : user.displayName || "Atleta",
                         email: user.email,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
+                        // --- MODIFICACIÓN 6: Añadir prompt por defecto para nuevos usuarios ---
+                        objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
                         workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
                         favoriteExercises: [],
                         workoutSchedule: { 
@@ -1384,6 +1421,7 @@ export default function App() {
             name: name,
             email: user.email,
             goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
+            objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
             workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
             favoriteExercises: [],
             workoutSchedule: { 
@@ -1436,9 +1474,13 @@ export default function App() {
 
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
     
-    // --- SOLUCIÓN APLICADA ---
-    // Se elimina la "actualización optimista" y se confía en el listener `onSnapshot` para actualizar la UI.
-    // Esto crea un flujo de datos único, fiable y en tiempo real.
+    // --- MODIFICACIÓN 7: Crear el handler para actualizar el prompt de objetivos en Firebase ---
+    const handleUpdateObjective = async (newObjective) => {
+        if (!firebaseServices || !user) return;
+        const userDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`);
+        await updateDoc(userDocRef, { objectivePrompt: newObjective });
+    };
+
     const handleUpdateSchedule = async (newSchedule) => {
         if (!firebaseServices || !user) return;
         try {
@@ -1493,7 +1535,8 @@ export default function App() {
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
-            case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} />;
+            // --- MODIFICACIÓN 8: Pasar el nuevo handler al componente de Ajustes ---
+            case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
