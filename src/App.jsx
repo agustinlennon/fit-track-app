@@ -17,7 +17,7 @@ const normalizeString = (str) => {
 let firebaseConfig;
 let GEMINI_API_KEY;
 
-// Lógica de inicialización compatible con Canvas y Netlify sin usar ternarios a nivel superior.
+// Lógica de inicialización compatible con Canvas y Netlify.
 if (typeof __firebase_config !== 'undefined' && __firebase_config) {
   // Entorno de Canvas: Usa la configuración inyectada.
   try {
