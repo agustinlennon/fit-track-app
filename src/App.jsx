@@ -720,12 +720,17 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
         }
     };
     
+    // --- SOLUCIÓN APLICADA ---
+    // Se modifica la función para que elija un valor por defecto más inteligente al añadir una nueva sesión.
     const addWorkoutToDay = (day) => {
         const newSchedule = JSON.parse(JSON.stringify(schedule));
         if (!newSchedule[day] || !Array.isArray(newSchedule[day])) {
             newSchedule[day] = [];
         }
-        newSchedule[day].push({ time: '12:00', name: 'Descanso' });
+        // Lógica mejorada: Usa la primera opción de ejercicio que no sea "Descanso" como default.
+        // Si solo existe "Descanso", lo usa como último recurso.
+        const defaultWorkoutName = workoutOptions.find(opt => opt !== 'Descanso') || 'Descanso';
+        newSchedule[day].push({ time: '12:00', name: defaultWorkoutName });
         setSchedule(newSchedule);
     };
 
