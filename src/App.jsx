@@ -31,9 +31,9 @@ if (typeof __firebase_config !== 'undefined' && __firebase_config) {
   }
 } else {
   // Entorno de Netlify/Local: Usa los valores hardcodeados.
-  // ¡¡¡IMPORTANTE!!! Reemplaza "YOUR_FIREBASE_API_KEY" con tu clave real.
-  const apiKey = "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4"; 
-  if (apiKey !== "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4") {
+  const apiKey = "AIzaSyBgJN1vtmv7-cMKASPUXGzCFsvZc72bA4"; 
+  // CORRECCIÓN: La condición ahora compara con el texto placeholder original.
+  if (apiKey && apiKey !== "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4") {
       firebaseConfig = {
           apiKey: apiKey,
           authDomain: "fit-track-app-final.firebaseapp.com",
@@ -51,7 +51,6 @@ if (typeof __gemini_api_key !== 'undefined') {
   GEMINI_API_KEY = __gemini_api_key;
 } else {
   // Entorno de Netlify/Local: Usa tu clave de Gemini.
-  // ¡IMPORTANTE! Reemplaza "YOUR_GEMINI_API_KEY" con tu clave real.
   GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw";
 }
 
@@ -84,8 +83,6 @@ const callGeminiAPI = async (prompt, generationConfig = null) => {
   }
   
   let apiKey = GEMINI_API_KEY;
-  // Si la clave es el valor por defecto (placeholder), se usa una cadena vacía
-  // para que el entorno de Canvas pueda inyectar la clave correcta automáticamente.
   if (apiKey === "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw") {
     apiKey = "";
   }
