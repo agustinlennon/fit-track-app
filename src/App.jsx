@@ -45,10 +45,13 @@ if (!firebaseConfig) {
   };
 }
 
+// CORRECCIÓN: Se elimina `import.meta.env` para evitar errores de compilación.
+// Reemplaza "YOUR_GEMINI_API_KEY_HERE" con tu clave de API si no usas variables de entorno.
 if (!GEMINI_API_KEY) {
     console.warn("Gemini API Key not found via global variables. Using hardcoded placeholder.");
-    GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
+    GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw"; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
 }
+
 
 const app = initializeApp(firebaseConfig);
 const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
@@ -162,10 +165,15 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  // CORRECCIÓN: Normalizar el día de la semana para que coincida con las claves del planificador
+  // Lógica para obtener el plan de hoy desde el `workoutSchedule` del usuario.
+  // 1. Obtiene el nombre del día actual en español (ej: "jueves").
   const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
   
+  // 2. Busca en el plan semanal la entrada para el día de hoy.
+  // Si no encuentra nada, devuelve un array vacío, lo que se interpreta como "Descanso".
   const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
+  
+  // 3. Genera un texto descriptivo para usarlo en la recomendación de la IA.
   const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
 
 
@@ -254,10 +262,13 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
             <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
             <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
        </div>
-       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <Card className="lg:col-span-3 flex flex-col justify-between">
+       {/* --- CAMBIO DE DISEÑO --- */}
+       {/* Se cambió "lg:" por "md:" para que el diseño de 2 columnas se active en pantallas medianas y grandes */}
+       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+        <Card className="md:col-span-3 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-xl text-gray-800 dark:text-white">Entrenamiento de Hoy</h3>
+            {/* El contenido se renderiza basado en `todaysPlan`. Si el plan contiene {name: 'Descanso'}, eso es lo que se mostrará. */}
             {Array.isArray(todaysPlan) && todaysPlan.length > 0 ? (
                 todaysPlan.map((p, i) => (
                     <div key={i} className="flex justify-between items-baseline mt-4">
@@ -273,7 +284,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
             <Sparkles size={18}/> Iniciar Rutina con IA
           </Button>
         </Card>
-        <Card className="lg:col-span-2">
+        <Card className="md:col-span-2">
           <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación de la IA</h3>
           <p className={`mt-2 text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
             {aiRecommendation.text}
