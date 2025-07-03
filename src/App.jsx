@@ -14,24 +14,39 @@ const normalizeString = (str) => {
 
 // --- INICIALIZACIÓN DE FIREBASE Y SERVICIOS ---
 
-// Para el entorno de Canvas, las claves se inyectan automáticamente.
-// Para tu deploy en Netlify, asegúrate de que estos valores sean correctos.
-const firebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
-  ? JSON.parse(__firebase_config)
-  : {
+let firebaseConfig;
+let GEMINI_API_KEY;
+
+// Lógica de inicialización compatible con Canvas y Netlify sin usar ternarios a nivel superior.
+if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+  // Entorno de Canvas: Usa la configuración inyectada.
+  try {
+    firebaseConfig = JSON.parse(__firebase_config);
+  } catch (e) {
+    console.error("Error parsing __firebase_config:", e);
+    firebaseConfig = {}; // Fallback en caso de error
+  }
+} else {
+  // Entorno de Netlify/Local: Usa los valores hardcodeados.
+  // Asegúrate de que estos valores son correctos para tu proyecto.
+  firebaseConfig = {
       apiKey: "AIzaSyBgJN1vtmv7-cMKASPUXGzCFsvZc72bA4",
       authDomain: "fit-track-app-final.firebaseapp.com",
       projectId: "fit-track-app-final",
       storageBucket: "fit-track-app-final.firebaseappstorage.com",
       messagingSenderId: "319971791213",
       appId: "1:319971791213:web:6921580a6072b322694a64"
-    };
+  };
+}
 
-// Para el entorno de Canvas, la clave se inyecta automáticamente si está vacía.
-// Para tu deploy en Netlify, DEBES reemplazar el valor "YOUR_GEMINI_API_KEY" con tu clave real.
-const GEMINI_API_KEY = typeof __gemini_api_key !== 'undefined'
-  ? __gemini_api_key
-  : import.meta.env.VITE_GEMINI_API_KEY; // <-- ¡REEMPLAZA ESTO PARA NETLIFY!
+if (typeof __gemini_api_key !== 'undefined') {
+  // Entorno de Canvas: Usa la clave de Gemini inyectada.
+  GEMINI_API_KEY = __gemini_api_key;
+} else {
+  // Entorno de Netlify/Local: Usa tu clave de Gemini.
+  // ¡IMPORTANTE! Reemplaza "YOUR_GEMINI_API_KEY" con tu clave real.
+  GEMINI_API_KEY = "import.meta.env.VITE_GEMINI_API_KEY;";
+}
 
 const app = initializeApp(firebaseConfig);
 const appId = firebaseConfig.appId || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
@@ -57,9 +72,14 @@ const callGeminiAPI = async (prompt, generationConfig = null) => {
   if (generationConfig) {
     payload.generationConfig = generationConfig;
   }
-  // Usar una clave vacía en Canvas permite que el entorno la inyecte.
-  // En Netlify, se debe usar la clave que reemplazaste arriba.
-  const apiKey = GEMINI_API_KEY === "YOUR_GEMINI_API_KEY" ? "" : GEMINI_API_KEY;
+  
+  let apiKey = GEMINI_API_KEY;
+  // Si la clave es el valor por defecto (placeholder), se usa una cadena vacía
+  // para que el entorno de Canvas pueda inyectar la clave correcta automáticamente.
+  if (apiKey === "YOUR_GEMINI_API_KEY") {
+    apiKey = "";
+  }
+
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(apiUrl, {
@@ -1538,4 +1558,3 @@ export default function App() {
         </div>
     );
 }
-
