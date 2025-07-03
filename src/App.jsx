@@ -1431,21 +1431,17 @@ export default function App() {
 
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
     
+    // --- SOLUCIÓN APLICADA ---
+    // Se elimina la "actualización optimista" y se confía en el listener `onSnapshot` para actualizar la UI.
+    // Esto crea un flujo de datos único, fiable y en tiempo real.
     const handleUpdateSchedule = async (newSchedule) => {
-        if (!firebaseServices || !user || !userData) return;
-
-        const previousUserData = userData;
-        setUserData(prevData => ({
-            ...prevData,
-            workoutSchedule: newSchedule
-        }));
-
+        if (!firebaseServices || !user) return;
         try {
             const userDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`);
             await updateDoc(userDocRef, { workoutSchedule: newSchedule });
         } catch (error) {
-            console.error("Error al guardar el plan semanal, revirtiendo cambios locales.", error);
-            setUserData(previousUserData);
+            console.error("Error al guardar el plan semanal.", error);
+            // Opcional: Mostrar un mensaje de error al usuario.
         }
     };
 
