@@ -161,27 +161,65 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  const todayDay = normalizeString(new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
-  const todaysPlan = userData?.workoutSchedule?.[todayDay] || [];
-  const workoutText = Array.isArray(todaysPlan) && todaysPlan.length > 0 ? todaysPlan.map(w => w.name).join(' y ') : 'Descanso';
+  const getDayPlan = (date) => {
+    const dayName = normalizeString(date.toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
+    const plan = userData?.workoutSchedule?.[dayName] || [];
+    const text = Array.isArray(plan) && plan.length > 0 ? plan.map(w => `${w.name} a las ${w.time}`).join(' y ') : 'Descanso';
+    return { name: dayName, text: text };
+  };
 
+  const todayDate = new Date();
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(todayDate.getDate() - 1);
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(todayDate.getDate() + 1);
+
+  const todaysPlan = getDayPlan(todayDate);
+  const yesterdaysPlan = getDayPlan(yesterdayDate);
+  const tomorrowsPlan = getDayPlan(tomorrowDate);
+
+  // --- MEJORA: Lógica de recomendación mejorada ---
   const getAiRecommendation = async () => {
-    if (!userData || !userData.goals) return;
-
+    if (!userData) return;
     setAiRecommendation({ text: 'Analizando tu día...', loading: true });
 
-    if (workoutText === 'Descanso') {
-        setAiRecommendation({ text: 'Hoy es día de descanso. ¡Aprovecha para recuperar! Una buena hidratación y estiramientos suaves son ideales.', loading: false });
-        return;
-    }
-
     try {
-        const caloriePrompt = `Estima las calorías totales quemadas para el siguiente plan de entrenamiento: "${workoutText}". Responde solo con un número (ej: 450).`;
-        const estimatedCaloriesText = await callGeminiAPI(caloriePrompt);
-        const estimatedCalories = parseInt(estimatedCaloriesText.match(/\d+/)[0], 10) || 0;
+        // Simulación de llamada a API de clima. En una app real, usarías una API como OpenWeatherMap.
+        const weather = "Noche calurosa, 28°C con alta humedad.";
+        
+        const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
+        
+        const prompt = `
+            Actúa como mi entrenador personal y nutricionista profesional. Mi nombre es ${userData.name}.
 
-        const foodPrompt = `Mi objetivo de calorías diario es ${userData.goals.calories} kcal. Hoy voy a realizar un entrenamiento (${workoutText}) donde se estima que quemaré ${estimatedCalories} kcal adicionales. Basado en esto, ¿cuál debería ser mi ingesta calórica total hoy? Además, sugiere una comida post-entrenamiento rica en proteínas y carbohidratos para ayudar a la recuperación. Responde en español, de forma concisa y amigable.`;
-        const recommendationText = await callGeminiAPI(foodPrompt);
+            Aquí están mis datos y contexto para el día de hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}:
+
+            **Mis Datos y Objetivos:**
+            - ${objectivePrompt}
+
+            **Mis Metas Nutricionales Diarias:**
+            - Objetivo de Calorías: ${userData.goals?.calories || 2500} kcal.
+            - Objetivo de Proteínas: ${userData.goals?.protein || 180} g.
+            - Objetivo de Carbohidratos: ${userData.goals?.carbs || 250} g.
+            - Objetivo de Grasas: ${userData.goals?.fat || 70} g.
+
+            **Contexto del Día:**
+            - Clima en mi ciudad: ${weather}.
+            - Entrenamiento de Ayer (${yesterdaysPlan.name}): ${yesterdaysPlan.text}.
+            - Entrenamiento de Hoy (${todaysPlan.name}): ${todaysPlan.text}.
+            - Entrenamiento de Mañana (${tomorrowsPlan.name}): ${tomorrowsPlan.text}.
+
+            Basado en TODA esta información, por favor, dame mi informe diario personalizado. El informe debe ser claro, amigable y en un lenguaje natural, incluyendo los siguientes puntos:
+
+            1.  **Comida Pre-Entrenamiento:** Sugiéreme qué debo comer antes de mi entrenamiento de hoy y con cuánta antelación.
+            2.  **Comida Post-Entrenamiento:** Recomiéndame una comida post-entrenamiento ideal para mi recuperación.
+            3.  **Ajustes por Clima:** Dime si debo ajustar mis calorías o, más importante, mi hidratación debido al clima de hoy (${weather}).
+            4.  **Suplementación:** Aconséjame sobre si es recomendable para mí tomar suplementos como proteína en polvo, creatina o electrolitos, considerando mis objetivos y entrenamientos.
+            5.  **Cuidados Específicos:** Coméntame si el entrenamiento de hoy requiere algún cuidado especial debido al clima.
+            6.  **Motivación del Día:** Finaliza con una breve frase de motivación o un recordatorio positivo para mantenerme enfocado.
+        `;
+
+        const recommendationText = await callGeminiAPI(prompt);
         setAiRecommendation({ text: recommendationText, loading: false });
 
     } catch (error) {
@@ -250,13 +288,16 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
         <Card className="md:col-span-3 flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-xl text-gray-800 dark:text-white">Entrenamiento de Hoy</h3>
-            {Array.isArray(todaysPlan) && todaysPlan.length > 0 ? (
-                todaysPlan.map((p, i) => (
-                    <div key={i} className="flex justify-between items-baseline mt-4">
-                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{p.name}</p>
-                        <p className="text-lg text-gray-500 dark:text-gray-400">{p.time}</p>
-                    </div>
-                ))
+            {Array.isArray(todaysPlan.text.split(' y ')) && todaysPlan.text !== 'Descanso' ? (
+                todaysPlan.text.split(' y ').map((p, i) => {
+                    const parts = p.split(' a las ');
+                    return (
+                        <div key={i} className="flex justify-between items-baseline mt-4">
+                            <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{parts[0]}</p>
+                            <p className="text-lg text-gray-500 dark:text-gray-400">{parts[1]}</p>
+                        </div>
+                    )
+                })
             ) : (
                 <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 my-4">Descanso</p>
             )}
@@ -267,14 +308,14 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
         </Card>
         <Card className="md:col-span-2 flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación de la IA</h3>
-            <p className={`mt-2 text-gray-600 dark:text-gray-300 ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
+            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación del Día</h3>
+            <p className={`mt-2 text-gray-600 dark:text-gray-300 whitespace-pre-wrap ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
               {aiRecommendation.text}
             </p>
           </div>
           <Button onClick={getAiRecommendation} disabled={aiRecommendation.loading} className="w-full mt-4">
             <Sparkles size={18}/> 
-            {aiRecommendation.loading ? 'Analizando...' : 'Generar Recomendación'}
+            {aiRecommendation.loading ? 'Analizando...' : 'Generar Informe'}
           </Button>
         </Card>
       </div>
