@@ -31,6 +31,7 @@ if (typeof __gemini_api_key !== 'undefined') {
 }
 
 // Si las variables globales no existen, se usan valores de respaldo.
+// Se elimina el console.warn para una consola más limpia.
 if (!firebaseConfig) {
   firebaseConfig = {
    apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
@@ -1007,6 +1008,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         }
     };
     
+    // --- SOLUCIÓN ERROR 429: Recálculo de calorías manual ---
     const handleRecalculateCalories = async (exerciseIndex) => {
         setRecalculatingIndex(exerciseIndex);
         const exercise = routine[exerciseIndex];
@@ -1135,15 +1137,18 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                                             <div>
                                                 <label className="text-xs font-medium">Series</label>
-                                                <input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} onBlur={() => handleRecalculateCalories(index)} className={inputClasses} />
+                                                {/* --- SOLUCIÓN ERROR 429: Se elimina `onBlur` --- */}
+                                                <input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} className={inputClasses} />
                                             </div>
                                             <div>
                                                 <label className="text-xs font-medium">Reps</label>
-                                                <input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} onBlur={() => handleRecalculateCalories(index)} className={inputClasses} />
+                                                {/* --- SOLUCIÓN ERROR 429: Se elimina `onBlur` --- */}
+                                                <input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} className={inputClasses} />
                                             </div>
                                             <div>
                                                 <label className="text-xs font-medium">Peso (kg)</label>
-                                                <input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} onBlur={() => handleRecalculateCalories(index)} className={inputClasses} />
+                                                {/* --- SOLUCIÓN ERROR 429: Se elimina `onBlur` --- */}
+                                                <input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} className={inputClasses} />
                                             </div>
                                              <div>
                                                 <label className="text-xs font-medium">Equipo</label>
@@ -1159,6 +1164,11 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                                             <span className={`flex items-center gap-1 ${recalculatingIndex === index ? 'animate-pulse' : ''}`}>
                                                 <Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}
                                             </span>
+                                            {/* --- SOLUCIÓN ERROR 429: Botón para recalcular manualmente --- */}
+                                            <Button onClick={() => handleRecalculateCalories(index)} variant="secondary" className="px-2 py-1 text-xs" disabled={recalculatingIndex === index}>
+                                                <RotateCcw size={14}/>
+                                                {recalculatingIndex === index ? '...' : 'Actualizar'}
+                                            </Button>
                                         </div>
                                     </div>
                                     <div className="w-full sm:w-auto flex flex-col gap-2 mt-2 sm:mt-0">
@@ -1208,7 +1218,6 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
         return Array.isArray(completedWorkouts) ? completedWorkouts.filter(w => new Date(w.date) >= startDate) : [];
     }, [completedWorkouts, timeFilter]);
 
-    // --- SOLUCIÓN ERROR 429: La llamada a la IA ahora es manual ---
     const handleAnalyzeMuscles = async () => {
         if (filteredWorkouts.length === 0) {
             setMuscleData([]);
@@ -1259,7 +1268,6 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
                         <button onClick={() => setTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
                     </div>
                 </div>
-                {/* --- SOLUCIÓN ERROR 429: Se añade un botón para el análisis manual --- */}
                 <div className="mb-4">
                     <Button onClick={handleAnalyzeMuscles} disabled={loadingAnalysis} className="w-full">
                         {loadingAnalysis ? 'Analizando...' : 'Analizar Músculos Trabajados'}
