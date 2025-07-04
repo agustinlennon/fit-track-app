@@ -184,39 +184,26 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     setAiRecommendation({ text: 'Analizando tu día...', loading: true });
 
     try {
-        // Simulación de llamada a API de clima. En una app real, usarías una API como OpenWeatherMap.
-        const weather = "Noche calurosa, 28°C con alta humedad.";
+        // --- MEJORA: El clima ahora es más realista para el invierno ---
+        const weather = "Día fresco de invierno, 12°C.";
         
         const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
         
+        // --- MEJORA: Prompt rediseñado para ser más conciso y natural ---
         const prompt = `
-            Actúa como mi entrenador personal y nutricionista profesional. Mi nombre es ${userData.name}.
+            Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}.
 
-            Aquí están mis datos y contexto para el día de hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}:
+            Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}:
+            - **Mi objetivo principal:** ${objectivePrompt}.
+            - **Ayer (${yesterdaysPlan.name}) entrené:** ${yesterdaysPlan.text}.
+            - **Hoy (${todaysPlan.name}) mi plan es:** ${todaysPlan.text}.
+            - **Mañana (${tomorrowsPlan.name}) entrenaré:** ${tomorrowsPlan.text}.
+            - **El clima de hoy:** ${weather}.
 
-            **Mis Datos y Objetivos:**
-            - ${objectivePrompt}
-
-            **Mis Metas Nutricionales Diarias:**
-            - Objetivo de Calorías: ${userData.goals?.calories || 2500} kcal.
-            - Objetivo de Proteínas: ${userData.goals?.protein || 180} g.
-            - Objetivo de Carbohidratos: ${userData.goals?.carbs || 250} g.
-            - Objetivo de Grasas: ${userData.goals?.fat || 70} g.
-
-            **Contexto del Día:**
-            - Clima en mi ciudad: ${weather}.
-            - Entrenamiento de Ayer (${yesterdaysPlan.name}): ${yesterdaysPlan.text}.
-            - Entrenamiento de Hoy (${todaysPlan.name}): ${todaysPlan.text}.
-            - Entrenamiento de Mañana (${tomorrowsPlan.name}): ${tomorrowsPlan.text}.
-
-            Basado en TODA esta información, por favor, dame mi informe diario personalizado. El informe debe ser claro, amigable y en un lenguaje natural, incluyendo los siguientes puntos:
-
-            1.  **Comida Pre-Entrenamiento:** Sugiéreme qué debo comer antes de mi entrenamiento de hoy y con cuánta antelación.
-            2.  **Comida Post-Entrenamiento:** Recomiéndame una comida post-entrenamiento ideal para mi recuperación.
-            3.  **Ajustes por Clima:** Dime si debo ajustar mis calorías o, más importante, mi hidratación debido al clima de hoy (${weather}).
-            4.  **Suplementación:** Aconséjame sobre si es recomendable para mí tomar suplementos como proteína en polvo, creatina o electrolitos, considerando mis objetivos y entrenamientos.
-            5.  **Cuidados Específicos:** Coméntame si el entrenamiento de hoy requiere algún cuidado especial debido al clima.
-            6.  **Motivación del Día:** Finaliza con una breve frase de motivación o un recordatorio positivo para mantenerme enfocado.
+            Basado en todo esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos:
+            - Una sugerencia rápida para la comida pre y post entrenamiento.
+            - Un consejo clave sobre hidratación o suplementación relevante para hoy.
+            - Finaliza con una frase motivadora.
         `;
 
         const recommendationText = await callGeminiAPI(prompt);
