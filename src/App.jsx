@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send } from 'lucide-react';
 
 // --- FUNCIÓN AUXILIAR ---
 // Función para quitar tildes y normalizar strings para comparaciones
@@ -178,18 +178,15 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
   const yesterdaysPlan = getDayPlan(yesterdayDate);
   const tomorrowsPlan = getDayPlan(tomorrowDate);
 
-  // --- MEJORA: Lógica de recomendación mejorada ---
   const getAiRecommendation = async () => {
     if (!userData) return;
     setAiRecommendation({ text: 'Analizando tu día...', loading: true });
 
     try {
-        // --- MEJORA: El clima ahora es más realista para el invierno ---
         const weather = "Día fresco de invierno, 12°C.";
         
         const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
         
-        // --- MEJORA: Prompt rediseñado para ser más conciso y natural ---
         const prompt = `
             Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}.
 
@@ -1565,6 +1562,9 @@ export default function App() {
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
+            // --- CORRECCIÓN: Añadir los nuevos componentes al renderizador de vistas ---
+            case 'manual-workout': return <div>Constructor de Rutinas Manual (Próximamente)</div>;
+            case 'ai-chat': return <div>Chat con IA (Próximamente)</div>;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
@@ -1583,6 +1583,9 @@ export default function App() {
                         <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
+                        {/* --- CORRECCIÓN: Añadir los nuevos botones al menú --- */}
+                        <NavItem icon={Dumbbell} label="Ejercicios" viewName="manual-workout" />
+                        <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
                         <NavItem icon={History} label="Historial" viewName="history" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
@@ -1598,6 +1601,8 @@ export default function App() {
                     <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina IA" viewName="ai-workout" />
+                        <NavItem icon={Dumbbell} label="Ejercicios" viewName="manual-workout" />
+                        <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
                         <NavItem icon={Calendar} label="Plan" viewName="workout" />
                         <NavItem icon={History} label="Historial" viewName="history" />
                         <NavItem icon={User} label="Progreso" viewName="progress" />
