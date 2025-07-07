@@ -124,7 +124,117 @@ const Button = ({ children, onClick, className = '', variant = 'primary', disabl
 
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
+  
+// COMPONENTE ManualWorkout
+function ManualWorkout({ userData, setUserData }) {
+  const [selectedMuscle, setSelectedMuscle] = useState("");
+  const [selectedExercises, setSelectedExercises] = useState([]);
+
+  const exercises = userData?.favoriteExercises || [];
+
+  const filtered = selectedMuscle
+    ? exercises.filter((ex) => ex.muscle === selectedMuscle)
+    : exercises;
+
+  const toggleExercise = (exName) => {
+    setSelectedExercises((prev) =>
+      prev.includes(exName)
+        ? prev.filter((e) => e !== exName)
+        : [...prev, exName]
+    );
+  };
+
+  const handleSave = () => {
+    const newRoutine = {
+      date: new Date().toISOString(),
+      type: "manual",
+      exercises: selectedExercises,
+    };
+    const updatedHistory = [...(userData.workoutHistory || []), newRoutine];
+    setUserData({ ...userData, workoutHistory: updatedHistory });
+    alert("Rutina guardada en el historial");
+  };
+
+  const muscles = [...new Set(exercises.map((ex) => ex.muscle))];
+
   return (
+    <div>
+      <h2>Crear Rutina Manual</h2>
+      <label>
+        Filtrar por grupo muscular:
+        <select value={selectedMuscle} onChange={(e) => setSelectedMuscle(e.target.value)}>
+          <option value="">Todos</option>
+          {muscles.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </label>
+
+      <ul>
+        {filtered.map((ex) => (
+          <li key={ex.name}>
+            <label>
+              <input
+                type="checkbox"
+                checked={selectedExercises.includes(ex.name)}
+                onChange={() => toggleExercise(ex.name)}
+              />
+              {ex.name} ({ex.muscle})
+            </label>
+          </li>
+        ))}
+      </ul>
+
+      <button onClick={handleSave} disabled={selectedExercises.length === 0}>
+        Guardar Rutina
+      </button>
+    </div>
+  );
+}
+
+// COMPONENTE IAChat
+function IAChat({ userData }) {
+  const [messages, setMessages] = useState([
+    { from: "ia", text: "¡Hola! Soy tu coach personal. ¿En qué te ayudo hoy?" },
+  ]);
+  const [input, setInput] = useState("");
+
+  const getIAResponse = (question) => {
+    return `Entiendo que preguntás sobre: "${question}". Teniendo en cuenta tu objetivo de ${userData?.goal || "entrenamiento"}, te recomiendo...`;
+  };
+
+  const handleSend = () => {
+    if (!input.trim()) return;
+    const userMessage = { from: "user", text: input };
+    const iaMessage = { from: "ia", text: getIAResponse(input) };
+    setMessages((prev) => [...prev, userMessage, iaMessage]);
+    setInput("");
+  };
+
+  return (
+    <div>
+      <h2>Chat con tu IA</h2>
+      <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid #ccc", padding: "10px" }}>
+        {messages.map((msg, i) => (
+          <div key={i} style={{ textAlign: msg.from === "user" ? "right" : "left", margin: "5px 0" }}>
+            <b>{msg.from === "user" ? "Tú" : "IA"}:</b> {msg.text}
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Escribí tu pregunta..."
+        style={{ width: "70%" }}
+      />
+      <button onClick={handleSend}>Enviar</button>
+    </div>
+  );
+}
+
+
+return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
