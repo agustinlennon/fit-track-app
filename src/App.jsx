@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, BrainCircuit } from 'lucide-react';
 
 // --- FUNCIÓN AUXILIAR ---
 // Función para quitar tildes y normalizar strings para comparaciones
@@ -42,11 +42,9 @@ if (!firebaseConfig) {
   };
 }
 
-// --- CORRECCIÓN DE API KEY ---
-// Se asegura de que la clave de API sea una cadena vacía si no se proporciona una.
-// El entorno de Canvas inyectará la clave correcta en tiempo de ejecución.
+// Reemplaza con tu clave de API si no usas variables de entorno.
 if (!GEMINI_API_KEY) {
-    GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw"; 
+    GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw";
 }
 
 
@@ -61,6 +59,7 @@ const parseJsonFromMarkdown = (text) => {
     if (jsonMatch && jsonMatch[1]) {
       return JSON.parse(jsonMatch[1]);
     }
+    // Intenta parsear directamente si no encuentra el bloque de markdown
     return JSON.parse(text);
   } catch (error) {
     console.error("Failed to parse JSON:", error);
@@ -125,6 +124,7 @@ const Button = ({ children, onClick, className = '', variant = 'primary', disabl
 
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
@@ -287,9 +287,14 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
                 <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 my-4">Descanso</p>
             )}
           </div>
-          <Button onClick={() => setView('ai-workout')} className="w-full mt-4">
-            <Sparkles size={18}/> Iniciar Rutina con IA
-          </Button>
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+               <Button onClick={() => setView('ai-workout')} className="w-full">
+                   <Sparkles size={18}/> Rutina con IA
+               </Button>
+               <Button onClick={() => setView('manual-workout')} className="w-full" variant="secondary">
+                   <Dumbbell size={18}/> Rutina Manual
+               </Button>
+           </div>
         </Card>
         <Card className="md:col-span-2 flex flex-col justify-between">
           <div>
@@ -982,7 +987,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
-        const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.join(', ')}. Intenta incluirlos si son apropiados.` : '';
+        const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.map(ex => ex.name).join(', ')}. Intenta incluirlos si son apropiados.` : '';
         
         const objectivePromptText = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
 
@@ -995,7 +1000,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
             ${favoriteExercisesText}
             
             Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy.
-            IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment y caloriesBurned.`;
+            IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment, caloriesBurned y muscleGroup (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core").`;
         
         const generationConfig = {
             responseMimeType: "application/json",
@@ -1010,9 +1015,10 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                                 name: { type: "STRING" }, sets: { type: "STRING" }, reps: { type: "STRING" },
                                 weight: { type: "STRING" }, videoSearchQuery: { type: "STRING" },
                                 estimatedDuration: { type: "STRING" }, difficultyLevel: { type: "STRING" },
-                                equipment: { type: "STRING" }, caloriesBurned: { type: "STRING" }
+                                equipment: { type: "STRING" }, caloriesBurned: { type: "STRING" },
+                                muscleGroup: { type: "STRING" }
                             },
-                             required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel", "equipment", "caloriesBurned"]
+                             required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel", "equipment", "caloriesBurned", "muscleGroup"]
                         }
                     }
                 }
@@ -1034,7 +1040,6 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
         }
     };
     
-    // --- SOLUCIÓN ERROR 429: Recálculo de calorías manual ---
     const handleRecalculateCalories = async (exerciseIndex) => {
         setRecalculatingIndex(exerciseIndex);
         const exercise = routine[exerciseIndex];
@@ -1143,11 +1148,11 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                     </Card>
 
                     {routine.map((exercise, index) => {
-                        const isFavorite = userData.favoriteExercises?.includes(exercise.name);
+                        const isFavorite = userData.favoriteExercises?.some(favEx => favEx.name === exercise.name);
                         return (
                         <React.Fragment key={index}>
                             <Card className={`border-2 ${exercise.completed ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-transparent'}`}>
-                                <button onClick={() => handleToggleFavorite(exercise.name)} className="absolute top-2 left-2 text-gray-400 hover:text-yellow-400 transition-colors z-10" aria-label="Marcar como favorito">
+                                <button onClick={() => handleToggleFavorite(exercise)} className="absolute top-2 left-2 text-gray-400 hover:text-yellow-400 transition-colors z-10" aria-label="Marcar como favorito">
                                     <Star size={20} className={isFavorite ? "text-yellow-400 fill-current" : ""} />
                                 </button>
                                 <button
@@ -1163,17 +1168,14 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                                             <div>
                                                 <label className="text-xs font-medium">Series</label>
-                                                {/* --- SOLUCIÓN ERROR 429: Se elimina `onBlur` --- */}
                                                 <input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} className={inputClasses} />
                                             </div>
                                             <div>
                                                 <label className="text-xs font-medium">Reps</label>
-                                                {/* --- SOLUCIÓN ERROR 429: Se elimina `onBlur` --- */}
                                                 <input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} className={inputClasses} />
                                             </div>
                                             <div>
                                                 <label className="text-xs font-medium">Peso (kg)</label>
-                                                {/* --- SOLUCIÓN ERROR 429: Se elimina `onBlur` --- */}
                                                 <input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} className={inputClasses} />
                                             </div>
                                              <div>
@@ -1190,7 +1192,6 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
                                             <span className={`flex items-center gap-1 ${recalculatingIndex === index ? 'animate-pulse' : ''}`}>
                                                 <Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}
                                             </span>
-                                            {/* --- SOLUCIÓN ERROR 429: Botón para recalcular manualmente --- */}
                                             <Button onClick={() => handleRecalculateCalories(index)} variant="secondary" className="px-2 py-1 text-xs" disabled={recalculatingIndex === index}>
                                                 <RotateCcw size={14}/>
                                                 {recalculatingIndex === index ? '...' : 'Actualizar'}
@@ -1333,6 +1334,204 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
     );
 };
 
+// --- NUEVO COMPONENTE: ManualWorkoutGenerator ---
+const ManualWorkoutGenerator = ({ userData, handleGoBack, handleSaveWorkout, handleToggleFavorite }) => {
+    const [routine, setRoutine] = useState([]);
+    const [view, setView] = useState('selector'); // 'selector' o 'editor'
+    const [selectedMuscle, setSelectedMuscle] = useState('Todos');
+    const [selectedExercises, setSelectedExercises] = useState({}); // { [exercise.name]: boolean }
+
+    const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
+
+    const muscleGroups = useMemo(() => {
+        const groups = new Set(favoriteExercises.map(ex => ex.muscleGroup || 'Sin Grupo'));
+        return ['Todos', ...Array.from(groups)];
+    }, [favoriteExercises]);
+
+    const filteredExercises = useMemo(() => {
+        if (selectedMuscle === 'Todos') return favoriteExercises;
+        return favoriteExercises.filter(ex => (ex.muscleGroup || 'Sin Grupo') === selectedMuscle);
+    }, [favoriteExercises, selectedMuscle]);
+
+    const handleToggleExerciseSelection = (exerciseName) => {
+        setSelectedExercises(prev => ({ ...prev, [exerciseName]: !prev[exerciseName] }));
+    };
+
+    const handleCreateRoutine = () => {
+        const newRoutine = favoriteExercises
+            .filter(ex => selectedExercises[ex.name])
+            .map(ex => ({ ...ex, completed: false })); // Copia el ejercicio y añade 'completed'
+        setRoutine(newRoutine);
+        setView('editor');
+    };
+
+    if (view === 'selector') {
+        return (
+            <div>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina Manual</h2>
+                    <Button onClick={handleGoBack} variant="secondary">Volver</Button>
+                </div>
+                <Card>
+                    <h3 className="font-bold text-lg mb-4">1. Filtra y selecciona tus ejercicios favoritos</h3>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1">Filtrar por grupo muscular</label>
+                        <select
+                            value={selectedMuscle}
+                            onChange={(e) => setSelectedMuscle(e.target.value)}
+                            className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg"
+                        >
+                            {muscleGroups.map(group => <option key={group} value={group}>{group}</option>)}
+                        </select>
+                    </div>
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                        {filteredExercises.length > 0 ? filteredExercises.map(ex => (
+                            <div key={ex.name} className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`} onClick={() => handleToggleExerciseSelection(ex.name)}>
+                                <input
+                                    type="checkbox"
+                                    readOnly
+                                    checked={!!selectedExercises[ex.name]}
+                                    className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="ml-3 font-semibold">{ex.name}</span>
+                                <span className="ml-auto text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-full">{ex.muscleGroup || 'N/A'}</span>
+                            </div>
+                        )) : (
+                            <p className="text-center text-gray-500 p-4">No tienes ejercicios favoritos en este grupo. ¡Añade algunos desde la rutina con IA!</p>
+                        )}
+                    </div>
+                     <Button onClick={handleCreateRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6">
+                        <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
+                    </Button>
+                </Card>
+            </div>
+        );
+    }
+
+    // Si la vista es 'editor', reutilizamos la lógica y UI de AiWorkoutGeneratorView
+    return (
+        <AiWorkoutGeneratorView
+            userData={userData}
+            completedWorkouts={[]} // No es relevante aquí
+            handleGoBack={() => setView('selector')}
+            handleSaveWorkout={handleSaveWorkout}
+            routine={routine}
+            setRoutine={setRoutine}
+            handleToggleFavorite={handleToggleFavorite}
+        />
+    );
+};
+
+
+// --- NUEVO COMPONENTE: IAChat ---
+const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGoBack }) => {
+    const [messages, setMessages] = useState([
+        { from: 'ai', text: `¡Hola ${userData?.name || 'Atleta'}! Soy tu asistente personal. Tengo acceso a tu progreso y objetivos. ¿En qué puedo ayudarte hoy?` }
+    ]);
+    const [input, setInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const chatEndRef = useRef(null);
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    const handleSend = async (e) => {
+        e.preventDefault();
+        if (!input.trim() || isLoading) return;
+
+        const userMessage = { from: 'user', text: input };
+        setMessages(prev => [...prev, userMessage]);
+        setInput('');
+        setIsLoading(true);
+
+        try {
+            // Simplificamos los datos para no exceder el límite de tokens
+            const contextSummary = {
+                objective: userData.objectivePrompt,
+                goals: userData.goals,
+                recentWorkouts: completedWorkouts.slice(0, 3).map(w => ({ date: w.date, exercises: w.exercises.map(e => e.name) })),
+                recentWeight: weightHistory.slice(-3),
+            };
+
+            const prompt = `
+                Actúa como un entrenador personal y nutricionista experto, amigable y motivador. Mi nombre es ${userData.name}.
+                
+                Aquí tienes un resumen de mi contexto actual:
+                ${JSON.stringify(contextSummary)}
+
+                El usuario ha enviado el siguiente mensaje en nuestro chat:
+                "${userMessage.text}"
+
+                Basándote en el contexto proporcionado y el mensaje del usuario, proporciona una respuesta útil, concisa y conversacional.
+            `;
+
+            const aiResponseText = await callGeminiAPI(prompt);
+            const aiMessage = { from: 'ai', text: aiResponseText };
+            setMessages(prev => [...prev, aiMessage]);
+
+        } catch (error) {
+            console.error("Error fetching AI chat response:", error);
+            const errorMessage = { from: 'ai', text: 'Lo siento, he tenido un problema para conectar. Por favor, inténtalo de nuevo más tarde.' };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    return (
+        <div className="flex flex-col h-full max-h-[85vh]">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                    <BrainCircuit /> Chat con tu Coach IA
+                </h2>
+                <Button onClick={handleGoBack} variant="secondary">
+                    <ChevronLeft size={18} /> Volver
+                </Button>
+            </div>
+            <Card className="flex-1 flex flex-col">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {messages.map((msg, index) => (
+                        <div key={index} className={`flex items-end gap-2 ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            {msg.from === 'ai' && <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white flex-shrink-0"><Bot size={20}/></div>}
+                            <div className={`max-w-md p-3 rounded-2xl ${msg.from === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none'}`}>
+                                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                            </div>
+                             {msg.from === 'user' && <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-white flex-shrink-0"><User size={20}/></div>}
+                        </div>
+                    ))}
+                    {isLoading && (
+                         <div className="flex items-end gap-2 justify-start">
+                            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white flex-shrink-0"><Bot size={20}/></div>
+                            <div className="max-w-md p-3 rounded-2xl bg-gray-200 dark:bg-gray-700 rounded-bl-none">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <div ref={chatEndRef} />
+                </div>
+                <form onSubmit={handleSend} className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center gap-3">
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        placeholder="Escribe tu consulta aquí..."
+                        className="flex-1 w-full p-3 bg-gray-100 dark:bg-gray-600 border-transparent rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        disabled={isLoading}
+                    />
+                    <Button type="submit" disabled={isLoading || !input.trim()}>
+                        <Send size={18} />
+                    </Button>
+                </form>
+            </Card>
+        </div>
+    );
+};
+
 
 // --- COMPONENTE PRINCIPAL DE LA APP ---
 export default function App() {
@@ -1369,14 +1568,11 @@ export default function App() {
                     return;
                 }
                 
-                // Lógica de autenticación específica para el entorno de Canvas
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else if (typeof __firebase_config !== 'undefined') {
-                    // Si __firebase_config existe, estamos en Canvas, usar anónimo
                     await signInAnonymously(auth);
                 }
-                // En Netlify, la autenticación se manejará por separado o se esperará la acción del usuario
             } catch (error) {
                 console.error("Automatic sign-in failed:", error);
             } finally {
@@ -1493,7 +1689,6 @@ export default function App() {
         setBodyMeasurements([]);
         setCompletedWorkouts([]);
         setCurrentAiRoutine([]);
-        // Forzar un re-login anónimo para usuarios no registrados en el entorno de Canvas
         if (typeof __firebase_config !== 'undefined') {
              await signInAnonymously(auth);
         }
@@ -1535,16 +1730,21 @@ export default function App() {
         await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/bodyMeasurements`), measurementLog);
     };
 
-    const handleToggleFavorite = async (exerciseName) => {
+    const handleToggleFavorite = async (exercise) => {
         if (!firebaseServices || !user || !userData) return;
         const { db } = firebaseServices;
         const userDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`);
-        const isFavorite = userData.favoriteExercises?.includes(exerciseName);
+        const isFavorite = userData.favoriteExercises?.some(favEx => favEx.name === exercise.name);
 
         if (isFavorite) {
-            await updateDoc(userDocRef, { favoriteExercises: arrayRemove(exerciseName) });
+            const exerciseToRemove = userData.favoriteExercises.find(favEx => favEx.name === exercise.name);
+            if (exerciseToRemove) {
+                await updateDoc(userDocRef, { favoriteExercises: arrayRemove(exerciseToRemove) });
+            }
         } else {
-            await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseName) });
+            // Aseguramos que el objeto que guardamos no tenga el estado 'completed'
+            const { completed, ...exerciseToSave } = exercise;
+            await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseToSave) });
         }
     };
 
@@ -1563,9 +1763,8 @@ export default function App() {
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
-            // --- CORRECCIÓN: Añadir los nuevos componentes al renderizador de vistas ---
-            case 'manual-workout': return <ManualWorkoutCreator userData={userData} setView={setView} setCurrentAiRoutine={setCurrentAiRoutine} />;
-            case 'ai-chat': return <AIChat userData={userData} completedWorkouts={completedWorkouts} />;
+            case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} handleToggleFavorite={handleToggleFavorite} />;
+            case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
@@ -1584,8 +1783,7 @@ export default function App() {
                         <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
-                        {/* --- CORRECCIÓN: Añadir los nuevos botones al menú --- */}
-                        <NavItem icon={Dumbbell} label="Ejercicios" viewName="manual-workout" />
+                        <NavItem icon={Dumbbell} label="Rutina Manual" viewName="manual-workout" />
                         <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
                         <NavItem icon={History} label="Historial" viewName="history" />
@@ -1602,7 +1800,7 @@ export default function App() {
                     <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                         <NavItem icon={Sparkles} label="Rutina IA" viewName="ai-workout" />
-                        <NavItem icon={Dumbbell} label="Ejercicios" viewName="manual-workout" />
+                        <NavItem icon={Dumbbell} label="Manual" viewName="manual-workout" />
                         <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
                         <NavItem icon={Calendar} label="Plan" viewName="workout" />
                         <NavItem icon={History} label="Historial" viewName="history" />
