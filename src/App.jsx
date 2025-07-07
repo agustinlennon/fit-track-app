@@ -1386,15 +1386,26 @@ const ManualWorkoutGenerator = ({ userData, handleGoBack, handleSaveWorkout, han
                     </div>
                     <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                         {filteredExercises.length > 0 ? filteredExercises.map(ex => (
-                            <div key={ex.name} className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`} onClick={() => handleToggleExerciseSelection(ex.name)}>
-                                <input
-                                    type="checkbox"
-                                    readOnly
-                                    checked={!!selectedExercises[ex.name]}
-                                    className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                                />
-                                <span className="ml-3 font-semibold">{ex.name}</span>
-                                <span className="ml-auto text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-full">{ex.muscleGroup || 'N/A'}</span>
+                            <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                                <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}>
+                                    <input
+                                        type="checkbox"
+                                        readOnly
+                                        checked={!!selectedExercises[ex.name]}
+                                        className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"
+                                    />
+                                    <span className="ml-3 font-semibold">{ex.name}</span>
+                                </div>
+                                <div className="flex items-center flex-shrink-0 ml-auto">
+                                    <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-full">{ex.muscleGroup || 'N/A'}</span>
+                                    <button
+                                        onClick={() => handleToggleFavorite(ex)}
+                                        className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1"
+                                        aria-label={`Eliminar ${ex.name} de favoritos`}
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
                             </div>
                         )) : (
                             <p className="text-center text-gray-500 p-4">No tienes ejercicios favoritos en este grupo. ¡Añade algunos desde la rutina con IA!</p>
