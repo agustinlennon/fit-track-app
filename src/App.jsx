@@ -1441,6 +1441,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
         </div>
     );
 };
+
 function ManualWorkout({ userData, setUserData, handleGoBack }) {
   const [selectedMuscle, setSelectedMuscle] = React.useState("");
   const [selectedExercises, setSelectedExercises] = React.useState([]);
@@ -1470,36 +1471,59 @@ function ManualWorkout({ userData, setUserData, handleGoBack }) {
     alert("Rutina guardada en el historial");
   };
 
-  const muscles = [...new Set(exercises.map((ex) => ex.muscle))];
+  const muscles = ["Brazos", "Piernas", "Core", "Espalda", "Pecho"];
 
   return (
-    <div>
+    <div style={{ padding: "1rem" }}>
       <h2>Crear Rutina Manual</h2>
       <button onClick={handleGoBack}>← Volver</button>
-      <label>
-        Filtrar por grupo muscular:
+
+      <div style={{ marginTop: "1rem" }}>
+        <label style={{ fontWeight: "bold" }}>Filtrar por grupo muscular:</label>
         <select value={selectedMuscle} onChange={(e) => setSelectedMuscle(e.target.value)}>
           <option value="">Todos</option>
           {muscles.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
-      </label>
-      <ul>
-        {filtered.map((ex) => (
-          <li key={ex.name}>
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedExercises.includes(ex.name)}
-                onChange={() => toggleExercise(ex.name)}
-              />
-              {ex.name} ({ex.muscle})
-            </label>
-          </li>
-        ))}
-      </ul>
-      <button onClick={handleSave} disabled={selectedExercises.length === 0}>
+      </div>
+
+      <div style={{ marginTop: "1rem" }}>
+        <h3>Ejercicios Disponibles</h3>
+        {filtered.length === 0 ? (
+          <p>No hay ejercicios guardados en este grupo muscular.</p>
+        ) : (
+          <ul>
+            {filtered.map((ex) => (
+              <li key={ex.name}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selectedExercises.includes(ex.name)}
+                    onChange={() => toggleExercise(ex.name)}
+                  />
+                  {ex.name} ({ex.muscle})
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div style={{ marginTop: "1rem" }}>
+        <h3>Rutina Seleccionada</h3>
+        {selectedExercises.length === 0 ? (
+          <p>No seleccionaste ningún ejercicio.</p>
+        ) : (
+          <ul>
+            {selectedExercises.map((exName) => (
+              <li key={exName}>{exName}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <button onClick={handleSave} disabled={selectedExercises.length === 0} style={{ marginTop: "1rem" }}>
         Guardar Rutina
       </button>
     </div>
