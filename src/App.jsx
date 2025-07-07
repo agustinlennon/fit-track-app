@@ -31,7 +31,6 @@ if (typeof __gemini_api_key !== 'undefined') {
 }
 
 // Si las variables globales no existen, se usan valores de respaldo.
-// Se elimina el console.warn para una consola más limpia.
 if (!firebaseConfig) {
   firebaseConfig = {
    apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
@@ -43,9 +42,11 @@ if (!firebaseConfig) {
   };
 }
 
-// Reemplaza "YOUR_GEMINI_API_KEY_HERE" con tu clave de API si no usas variables de entorno.
+// --- CORRECCIÓN DE API KEY ---
+// Se asegura de que la clave de API sea una cadena vacía si no se proporciona una.
+// El entorno de Canvas inyectará la clave correcta en tiempo de ejecución.
 if (!GEMINI_API_KEY) {
-    GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw"; // REEMPLAZA ESTO CON TU GEMINI API KEY REAL
+    GEMINI_API_KEY = "AIzaSyC91dOhzUbC4aber1rvZMtbkxpx8DxBbhw"; 
 }
 
 
@@ -124,117 +125,7 @@ const Button = ({ children, onClick, className = '', variant = 'primary', disabl
 
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
-  
-// COMPONENTE ManualWorkout
-function ManualWorkout({ userData, setUserData }) {
-  const [selectedMuscle, setSelectedMuscle] = useState("");
-  const [selectedExercises, setSelectedExercises] = useState([]);
-
-  const exercises = userData?.favoriteExercises || [];
-
-  const filtered = selectedMuscle
-    ? exercises.filter((ex) => ex.muscle === selectedMuscle)
-    : exercises;
-
-  const toggleExercise = (exName) => {
-    setSelectedExercises((prev) =>
-      prev.includes(exName)
-        ? prev.filter((e) => e !== exName)
-        : [...prev, exName]
-    );
-  };
-
-  const handleSave = () => {
-    const newRoutine = {
-      date: new Date().toISOString(),
-      type: "manual",
-      exercises: selectedExercises,
-    };
-    const updatedHistory = [...(userData.workoutHistory || []), newRoutine];
-    setUserData({ ...userData, workoutHistory: updatedHistory });
-    alert("Rutina guardada en el historial");
-  };
-
-  const muscles = [...new Set(exercises.map((ex) => ex.muscle))];
-
   return (
-    <div>
-      <h2>Crear Rutina Manual</h2>
-      <label>
-        Filtrar por grupo muscular:
-        <select value={selectedMuscle} onChange={(e) => setSelectedMuscle(e.target.value)}>
-          <option value="">Todos</option>
-          {muscles.map((m) => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-      </label>
-
-      <ul>
-        {filtered.map((ex) => (
-          <li key={ex.name}>
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedExercises.includes(ex.name)}
-                onChange={() => toggleExercise(ex.name)}
-              />
-              {ex.name} ({ex.muscle})
-            </label>
-          </li>
-        ))}
-      </ul>
-
-      <button onClick={handleSave} disabled={selectedExercises.length === 0}>
-        Guardar Rutina
-      </button>
-    </div>
-  );
-}
-
-// COMPONENTE IAChat
-function IAChat({ userData }) {
-  const [messages, setMessages] = useState([
-    { from: "ia", text: "¡Hola! Soy tu coach personal. ¿En qué te ayudo hoy?" },
-  ]);
-  const [input, setInput] = useState("");
-
-  const getIAResponse = (question) => {
-    return `Entiendo que preguntás sobre: "${question}". Teniendo en cuenta tu objetivo de ${userData?.goal || "entrenamiento"}, te recomiendo...`;
-  };
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const userMessage = { from: "user", text: input };
-    const iaMessage = { from: "ia", text: getIAResponse(input) };
-    setMessages((prev) => [...prev, userMessage, iaMessage]);
-    setInput("");
-  };
-
-  return (
-    <div>
-      <h2>Chat con tu IA</h2>
-      <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid #ccc", padding: "10px" }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{ textAlign: msg.from === "user" ? "right" : "left", margin: "5px 0" }}>
-            <b>{msg.from === "user" ? "Tú" : "IA"}:</b> {msg.text}
-          </div>
-        ))}
-      </div>
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Escribí tu pregunta..."
-        style={{ width: "70%" }}
-      />
-      <button onClick={handleSend}>Enviar</button>
-    </div>
-  );
-}
-
-
-return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
@@ -1442,132 +1333,6 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
     );
 };
 
-function ManualWorkout({ userData, setUserData, handleGoBack }) {
-  const [selectedMuscle, setSelectedMuscle] = React.useState("");
-  const [selectedExercises, setSelectedExercises] = React.useState([]);
-
-  const exercises = userData?.favoriteExercises || [];
-
-  const filtered = selectedMuscle
-    ? exercises.filter((ex) => ex.muscle === selectedMuscle)
-    : exercises;
-
-  const toggleExercise = (exName) => {
-    setSelectedExercises((prev) =>
-      prev.includes(exName)
-        ? prev.filter((e) => e !== exName)
-        : [...prev, exName]
-    );
-  };
-
-  const handleSave = () => {
-    const newRoutine = {
-      date: new Date().toISOString(),
-      type: "manual",
-      exercises: selectedExercises,
-    };
-    const updatedHistory = [...(userData.workoutHistory || []), newRoutine];
-    setUserData({ ...userData, workoutHistory: updatedHistory });
-    alert("Rutina guardada en el historial");
-  };
-
-  const muscles = ["Brazos", "Piernas", "Core", "Espalda", "Pecho"];
-
-  return (
-    <div style={{ padding: "1rem" }}>
-      <h2>Crear Rutina Manual</h2>
-      <button onClick={handleGoBack}>← Volver</button>
-
-      <div style={{ marginTop: "1rem" }}>
-        <label style={{ fontWeight: "bold" }}>Filtrar por grupo muscular:</label>
-        <select value={selectedMuscle} onChange={(e) => setSelectedMuscle(e.target.value)}>
-          <option value="">Todos</option>
-          {muscles.map((m) => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-      </div>
-
-      <div style={{ marginTop: "1rem" }}>
-        <h3>Ejercicios Disponibles</h3>
-        {filtered.length === 0 ? (
-          <p>No hay ejercicios guardados en este grupo muscular.</p>
-        ) : (
-          <ul>
-            {filtered.map((ex) => (
-              <li key={ex.name}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={selectedExercises.includes(ex.name)}
-                    onChange={() => toggleExercise(ex.name)}
-                  />
-                  {ex.name} ({ex.muscle})
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div style={{ marginTop: "1rem" }}>
-        <h3>Rutina Seleccionada</h3>
-        {selectedExercises.length === 0 ? (
-          <p>No seleccionaste ningún ejercicio.</p>
-        ) : (
-          <ul>
-            {selectedExercises.map((exName) => (
-              <li key={exName}>{exName}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <button onClick={handleSave} disabled={selectedExercises.length === 0} style={{ marginTop: "1rem" }}>
-        Guardar Rutina
-      </button>
-    </div>
-  );
-}
-
-function IAChat({ userData, handleGoBack }) {
-  const [messages, setMessages] = React.useState([
-    { from: "bot", text: "Hola, soy tu asistente IA. ¿En qué puedo ayudarte hoy?" }
-  ]);
-  const [input, setInput] = React.useState("");
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const userMsg = { from: "user", text: input };
-    const botReply = {
-      from: "bot",
-      text: "Gracias por tu mensaje. Pronto podré darte respuestas personalizadas."
-    };
-    setMessages((prev) => [...prev, userMsg, botReply]);
-    setInput("");
-  };
-
-  return (
-    <div>
-      <h2>Chat con tu Asistente IA</h2>
-      <button onClick={handleGoBack}>← Volver</button>
-      <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid #ccc", padding: "1rem", marginBottom: "1rem" }}>
-        {messages.map((msg, idx) => (
-          <div key={idx} style={{ textAlign: msg.from === "user" ? "right" : "left" }}>
-            <strong>{msg.from === "user" ? "Tú" : "IA"}:</strong> {msg.text}
-          </div>
-        ))}
-      </div>
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Escribí tu consulta..."
-      />
-      <button onClick={handleSend}>Enviar</button>
-    </div>
-  );
-}
 
 // --- COMPONENTE PRINCIPAL DE LA APP ---
 export default function App() {
@@ -1799,8 +1564,8 @@ export default function App() {
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
             // --- CORRECCIÓN: Añadir los nuevos componentes al renderizador de vistas ---
-            case 'manual-workout': return <ManualWorkout userData={userData} setUserData={setUserData} handleGoBack={() => setView('dashboard')} />;
-            case 'ai-chat':return <IAChat userData={userData} handleGoBack={() => setView('dashboard')}/>;
+            case 'manual-workout': return <ManualWorkoutCreator userData={userData} setView={setView} setCurrentAiRoutine={setCurrentAiRoutine} />;
+            case 'ai-chat': return <AIChat userData={userData} completedWorkouts={completedWorkouts} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
