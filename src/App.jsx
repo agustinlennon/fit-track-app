@@ -1673,8 +1673,21 @@ export default function App() {
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
             // --- CORRECCIÓN: Añadir los nuevos componentes al renderizador de vistas ---
-            case 'manual-workout': return <div>Constructor de Rutinas Manual (Próximamente)</div>;
-            case 'ai-chat': return <div>Chat con IA (Próximamente)</div>;
+            case 'manual-workout':
+  return (
+    <ManualWorkout
+      userData={userData}
+      setUserData={setUserData}
+      handleGoBack={() => setView('dashboard')}
+    />
+  );
+            case 'ai-chat':
+  return (
+    <IAChat
+      userData={userData}
+      handleGoBack={() => setView('dashboard')}
+    />
+  );
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
         }
     };
