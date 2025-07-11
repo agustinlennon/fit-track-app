@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, BrainCircuit } from 'lucide-react';
 
 // --- FUNCIÓN AUXILIAR ---
@@ -68,32 +68,59 @@ const parseJsonFromMarkdown = (text) => {
   }
 };
 
-const callGeminiAPI = async (prompt, generationConfig = null) => {
+const callGeminiAPI = async (prompt, generationConfig = null, maxRetries = 3) => {
   const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
   if (generationConfig) {
     payload.generationConfig = generationConfig;
   }
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  let lastError = null;
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("API call failed response:", errorBody);
-    throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return result.candidates[0].content.parts[0].text;
+        } else {
+          console.error("Invalid response structure from API:", result);
+          throw new Error("Respuesta inválida de la API");
+        }
+      }
+
+      if (response.status === 503) {
+        lastError = new Error(`API call failed: ${response.status} ${response.statusText} (Model Overloaded)`);
+        const delay = 1000 * Math.pow(2, attempt); // Exponential backoff
+        console.warn(`Attempt ${attempt + 1} failed with 503. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue; // Retry the loop
+      }
+
+      // For other non-ok responses, fail immediately
+      const errorBody = await response.text();
+      console.error("API call failed response:", errorBody);
+      throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+
+    } catch (error) {
+      lastError = error;
+      console.error(`Error on attempt ${attempt + 1}:`, error);
+      if (attempt < maxRetries - 1) {
+        const delay = 1000 * Math.pow(2, attempt);
+        console.warn(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
-  const result = await response.json();
-  if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-    return result.candidates[0].content.parts[0].text;
-  } else {
-    console.error("Invalid response structure from API:", result);
-    throw new Error("Respuesta inválida de la API");
-  }
+  // If all retries fail, throw the last error
+  throw lastError || new Error("API call failed after multiple retries.");
 };
 
 
@@ -127,7 +154,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors">
@@ -157,6 +184,7 @@ const DashboardSkeleton = () => (
 const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFood }) => {
   const [timeFilter, setTimeFilter] = useState('week');
   const [aiRecommendation, setAiRecommendation] = useState({ text: 'Obtén una recomendación de nutrición para tu entrenamiento de hoy.', loading: false });
+  const [activityChartView, setActivityChartView] = useState('volume'); // 'volume' o 'muscle'
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
@@ -213,26 +241,84 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
     }
   };
 
-  const workoutSummary = useMemo(() => {
+  const filteredData = useMemo(() => {
     const now = new Date();
     let startDate;
 
-    if (timeFilter === 'week') {
-      startDate = new Date(new Date().setDate(now.getDate() - 7));
-    } else if (timeFilter === 'month') {
-      startDate = new Date(new Date().setMonth(now.getMonth() - 1));
-    } else { 
-      startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
+    switch (timeFilter) {
+        case 'month':
+            startDate = new Date(new Date().setMonth(now.getMonth() - 1));
+            break;
+        case 'year':
+            startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
+            break;
+        case 'week':
+        default:
+            startDate = new Date(new Date().setDate(now.getDate() - 7));
+            break;
+    }
+    return Array.isArray(completedWorkouts) ? completedWorkouts.filter(w => new Date(w.date) >= startDate) : [];
+  }, [completedWorkouts, timeFilter]);
+
+  const workoutSummary = useMemo(() => {
+    const totalWorkouts = filteredData.length;
+    const totalSets = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
+    const totalReps = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0) * (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
+    return { totalWorkouts, totalSets, totalReps };
+  }, [filteredData]);
+  
+ const activityChartData = useMemo(() => {
+    const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
+
+    const formatShortDate = (date) => {
+        return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+    };
+
+    if (activityChartView === 'volume') {
+        const dataByDate = filteredData.reduce((acc, workout) => {
+            if (!workout.date || typeof workout.date !== 'string') return acc;
+            
+            const dateObj = new Date(workout.date);
+            if (!isValidDate(dateObj)) return acc;
+
+            const dateKey = workout.date.slice(0, 10);
+            if (!acc[dateKey]) {
+                acc[dateKey] = { series: 0, dateObj: dateObj };
+            }
+            (workout.exercises || []).forEach(ex => {
+                acc[dateKey].series += parseInt(ex.sets, 10) || 0;
+            });
+            return acc;
+        }, {});
+
+        return Object.values(dataByDate)
+            .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
+            .map((data) => ({ name: formatShortDate(data.dateObj), series: data.series }));
     }
 
-    const filteredWorkouts = Array.isArray(completedWorkouts) ? completedWorkouts.filter(w => new Date(w.date) >= startDate) : [];
-    
-    const totalWorkouts = filteredWorkouts.length;
-    const totalSets = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
-    const totalReps = filteredWorkouts.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0), 0) : 0), 0);
+    if (activityChartView === 'muscle') {
+        const muscleCounts = filteredData.reduce((acc, workout) => {
+            (workout.exercises || []).forEach(ex => {
+                const muscle = ex.muscleGroup || 'Otro';
+                if (!acc[muscle]) {
+                    acc[muscle] = 0;
+                }
+                acc[muscle] += parseInt(ex.sets, 10) || 0;
+            });
+            return acc;
+        }, {});
+        
+        const totalSeries = Object.values(muscleCounts).reduce((sum, count) => sum + count, 0);
+        if (totalSeries === 0) return [];
 
-    return { totalWorkouts, totalSets, totalReps };
-  }, [completedWorkouts, timeFilter]);
+        return Object.entries(muscleCounts)
+            .map(([name, series]) => ({ name, series, fullMark: totalSeries }))
+            .sort((a, b) => b.series - a.series);
+    }
+
+    return [];
+  }, [filteredData, activityChartView]);
+
 
   if (!userData) {
     return <DashboardSkeleton />;
@@ -319,7 +405,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
                 <button onClick={() => setTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
             </div>
         </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
+        <div className="grid grid-cols-3 gap-4 text-center mb-6">
             <div>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalWorkouts}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Entrenos</p>
@@ -331,6 +417,46 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
             <div>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalReps}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Reps</p>
+            </div>
+        </div>
+        
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <div className="flex justify-center gap-2 mb-4">
+                 <Button onClick={() => setActivityChartView('volume')} variant={activityChartView === 'volume' ? 'primary' : 'secondary'} className="text-xs px-3 py-1">Volumen</Button>
+                 <Button onClick={() => setActivityChartView('muscle')} variant={activityChartView === 'muscle' ? 'primary' : 'secondary'} className="text-xs px-3 py-1">Músculos</Button>
+            </div>
+            <div className="h-60">
+                {activityChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        {activityChartView === 'volume' ? (
+                            <AreaChart data={activityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                <defs>
+                                    <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
+                                <XAxis dataKey="name" fontSize={12} />
+                                <YAxis fontSize={12} />
+                                <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
+                                <Area type="monotone" dataKey="series" name="Series totales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorVolume)" />
+                            </AreaChart>
+                        ) : (
+                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={activityChartData}>
+                                <PolarGrid strokeOpacity={0.3} />
+                                <PolarAngleAxis dataKey="name" fontSize={12} />
+                                <PolarRadiusAxis angle={30} domain={[0, 'dataMax + 5']} fontSize={10} axisLine={false} tick={false} />
+                                <Radar name="Series" dataKey="series" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                                <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
+                            </RadarChart>
+                        )}
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                        <p>No hay datos para mostrar en este período.</p>
+                    </div>
+                )}
             </div>
         </div>
       </Card>
@@ -1227,10 +1353,84 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
     );
 };
 
-const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
+const EditWorkoutModal = ({ workout, onClose, onSave }) => {
+    const [editedWorkout, setEditedWorkout] = useState(workout);
+
+    useEffect(() => {
+        setEditedWorkout(workout);
+    }, [workout]);
+
+    if (!editedWorkout) {
+        return null;
+    }
+
+    const handleDateChange = (e) => {
+        setEditedWorkout(prev => ({ ...prev, date: new Date(e.target.value).toISOString() }));
+    };
+
+    const handleExerciseChange = (index, field, value) => {
+        const newExercises = [...editedWorkout.exercises];
+        newExercises[index] = { ...newExercises[index], [field]: value };
+        setEditedWorkout(prev => ({ ...prev, exercises: newExercises }));
+    };
+
+    const addExercise = () => {
+        const newExercise = { name: '', sets: '3', reps: '10', weight: '0', completed: false };
+        setEditedWorkout(prev => ({ ...prev, exercises: [...(prev.exercises || []), newExercise] }));
+    };
+
+    const deleteExercise = (index) => {
+        const newExercises = editedWorkout.exercises.filter((_, i) => i !== index);
+        setEditedWorkout(prev => ({ ...prev, exercises: newExercises }));
+    };
+    
+    const inputClasses = "w-full p-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm";
+
+    return (
+        <Modal isOpen={!!workout} onClose={onClose} title="Editar Entrenamiento">
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha del Entrenamiento</label>
+                    <input
+                        type="datetime-local"
+                        value={editedWorkout.date.slice(0, 16)}
+                        onChange={handleDateChange}
+                        className={inputClasses}
+                    />
+                </div>
+                <h4 className="font-bold text-lg mt-4 border-b border-gray-200 dark:border-gray-700 pb-2">Ejercicios</h4>
+                <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                    {(editedWorkout.exercises || []).map((ex, index) => (
+                        <div key={index} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg space-y-2 relative">
+                             <button onClick={() => deleteExercise(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"><Trash2 size={16}/></button>
+                            <input type="text" placeholder="Nombre del Ejercicio" value={ex.name} onChange={e => handleExerciseChange(index, 'name', e.target.value)} className={inputClasses} />
+                             <div className="grid grid-cols-3 gap-2">
+                                <input type="text" placeholder="Series" value={ex.sets} onChange={e => handleExerciseChange(index, 'sets', e.target.value)} className={inputClasses} />
+                                <input type="text" placeholder="Reps" value={ex.reps} onChange={e => handleExerciseChange(index, 'reps', e.target.value)} className={inputClasses} />
+                                <input type="text" placeholder="Peso" value={ex.weight} onChange={e => handleExerciseChange(index, 'weight', e.target.value)} className={inputClasses} />
+                             </div>
+                        </div>
+                    ))}
+                </div>
+                 <Button onClick={addExercise} variant="secondary" className="w-full">
+                    <PlusCircle size={18}/> Añadir Ejercicio
+                 </Button>
+            </div>
+            <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button onClick={onClose} variant="secondary">Cancelar</Button>
+                <Button onClick={() => onSave(editedWorkout.id, editedWorkout)}>Guardar Cambios</Button>
+            </div>
+        </Modal>
+    );
+};
+
+
+const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog }) => {
+    const [editingWorkout, setEditingWorkout] = useState(null);
     const [timeFilter, setTimeFilter] = useState('week');
     const [muscleData, setMuscleData] = useState([]);
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+    const [analysisError, setAnalysisError] = useState('');
 
     const filteredWorkouts = useMemo(() => {
         const now = new Date();
@@ -1251,6 +1451,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
             return;
         }
         setLoadingAnalysis(true);
+        setAnalysisError('');
         const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
         const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
         
@@ -1260,39 +1461,54 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
 
             const muscleCounts = {};
             filteredWorkouts.forEach(workout => {
-                (Array.isArray(workout.exercises) ? workout.exercises : []).forEach(exercise => {
+                (workout.exercises || []).forEach(exercise => {
                     const muscle = muscleMap[exercise.name] || 'Otro';
                     if (!muscleCounts[muscle]) {
-                        muscleCounts[muscle] = 0;
+                        muscleCounts[muscle] = { series: 0, repeticiones: 0 };
                     }
-                    muscleCounts[muscle] += parseInt(exercise.sets, 10) || 0;
+                    const sets = parseInt(exercise.sets, 10) || 0;
+                    const reps = parseInt(String(exercise.reps).split('-')[0], 10) || 0;
+                    
+                    muscleCounts[muscle].series += sets;
+                    muscleCounts[muscle].repeticiones += sets * reps;
                 });
             });
 
-            setMuscleData(Object.entries(muscleCounts).map(([name, sets]) => ({ name, sets })));
+            setMuscleData(Object.entries(muscleCounts).map(([name, data]) => ({ name, ...data })));
 
         } catch (error) {
             console.error("Error analyzing muscles:", error);
+            setAnalysisError("No se pudo analizar la actividad. La IA podría estar sobrecargada. Inténtalo más tarde.");
             setMuscleData([]);
         } finally {
             setLoadingAnalysis(false);
         }
     };
 
+    const handleSaveEdit = async (id, data) => {
+        try {
+            await handleUpdateWorkoutLog(id, data);
+            setEditingWorkout(null);
+        } catch (error) {
+            console.error("Error al guardar el entrenamiento:", error);
+            alert("No se pudieron guardar los cambios.");
+        }
+    };
+    
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Historial de Entrenamientos</h2>
                 <Button onClick={handleGoBack} variant="secondary">Volver</Button>
             </div>
-
+            
             <Card className="mb-6">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-xl text-gray-800 dark:text-white">Análisis Muscular</h3>
                     <div className="flex gap-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
-                        <button onClick={() => setTimeFilter('day')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'day' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Día</button>
                         <button onClick={() => setTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
                         <button onClick={() => setTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
+                        <button onClick={() => setTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
                     </div>
                 </div>
                 <div className="mb-4">
@@ -1301,15 +1517,18 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
                     </Button>
                 </div>
                 {loadingAnalysis && <p className="text-center animate-pulse">Analizando...</p>}
+                {analysisError && <p className="text-red-500 text-center mt-2">{analysisError}</p>}
                 {muscleData.length > 0 && !loadingAnalysis && (
-                    <div className="h-60">
+                    <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={muscleData}>
                                 <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
                                 <XAxis dataKey="name" fontSize={12} />
                                 <YAxis />
                                 <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
-                                <Bar dataKey="sets" name="Series totales" fill="#3b82f6" />
+                                <Legend />
+                                <Bar dataKey="series" name="Series" fill="#3b82f6" />
+                                <Bar dataKey="repeticiones" name="Repeticiones" fill="#8b5cf6" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -1317,19 +1536,32 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack }) => {
             </Card>
 
             <div className="space-y-4">
-                {Array.isArray(filteredWorkouts) && filteredWorkouts.map(workout => (
+                {Array.isArray(completedWorkouts) && completedWorkouts.map(workout => (
                     <Card key={workout.id}>
-                        <h3 className="font-bold text-lg mb-2">{new Date(workout.date).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })}</h3>
-                        <ul className="space-y-1">
-                            {(Array.isArray(workout.exercises) ? workout.exercises : []).map((ex, i) => (
-                                <li key={i} className="text-sm text-gray-600 dark:text-gray-300">
-                                    - {ex.name}: {ex.sets} series de {ex.reps} reps con {ex.weight}.
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="font-bold text-lg mb-2">{new Date(workout.date).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })}</h3>
+                                <ul className="space-y-1 text-sm list-disc list-inside">
+                                    {(Array.isArray(workout.exercises) ? workout.exercises : []).map((ex, i) => (
+                                        <li key={i} className="text-gray-600 dark:text-gray-300">
+                                            <span className="font-semibold">{ex.name}:</span> {ex.sets} series de {ex.reps} reps con {ex.weight}.
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                             <Button onClick={() => setEditingWorkout(workout)} variant="secondary" className="px-2 py-2">
+                                <Edit size={16}/>
+                             </Button>
+                        </div>
                     </Card>
                 ))}
             </div>
+
+            <EditWorkoutModal
+                workout={editingWorkout}
+                onClose={() => setEditingWorkout(null)}
+                onSave={handleSaveEdit}
+            />
         </div>
     );
 };
@@ -1734,6 +1966,13 @@ export default function App() {
         const workoutLog = { date: new Date().toISOString(), exercises: workoutData };
         await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`), workoutLog);
     };
+    
+    const handleUpdateWorkoutLog = async (logId, newData) => {
+        if (!firebaseServices || !user || !logId) return;
+        const logDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`, logId);
+        const { id, ...dataToSave } = newData; // Remove id before saving
+        await updateDoc(logDocRef, dataToSave);
+    };
 
     const handleAddMeasurements = async (measurements) => {
         if (!firebaseServices || !user) return;
@@ -1772,7 +2011,7 @@ export default function App() {
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
-            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} />;
+            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
             case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} handleToggleFavorite={handleToggleFavorite} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
