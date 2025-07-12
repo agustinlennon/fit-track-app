@@ -563,7 +563,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
                             dataKey="y"
                             name="time"
                             domain={[0, 1440]}
-                            reversed={true}
+                            reversed={false}
                             tickCount={5}
                             tickFormatter={(minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`}
                             fontSize={12}
@@ -572,9 +572,14 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
                             cursor={{ strokeDasharray: '3 3' }}
                             contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}
                             formatter={(value, name, props) => {
-                                if(name === 'time') return new Date(props.payload.x).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'});
-                                return value;
+                                const date = new Date(props.payload.x);
+                                const timeZone = 'America/Argentina/Buenos_Aires';
+                                if (name === 'time') {
+                                    return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone });
+                                }
+                                return date.toLocaleDateString('es-AR', { timeZone });
                             }}
+                            labelFormatter={(label) => new Date(label).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
                         />
                         <Scatter name="Toma de Creatina" data={creatineChartData} fill="#8884d8" />
                     </ScatterChart>
