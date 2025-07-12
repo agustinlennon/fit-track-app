@@ -181,7 +181,7 @@ const DashboardSkeleton = () => (
 
 // --- VISTAS PRINCIPALES DE LA APLICACIÓN ---
 
-const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCreatine, creatineLog }) => {
+const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCreatine, creatineLog, inProgressWorkout }) => {
   const [timeFilter, setTimeFilter] = useState('week');
   const [creatineTimeFilter, setCreatineTimeFilter] = useState('week');
   const [aiRecommendation, setAiRecommendation] = useState({ text: 'Obtén una recomendación de nutrición para tu entrenamiento de hoy.', loading: false });
@@ -416,10 +416,10 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
             )}
           </div>
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-               <Button onClick={() => setView('ai-workout')} className="w-full">
+               <Button onClick={() => setView('ai-workout')} disabled={!!inProgressWorkout} className="w-full">
                    <Sparkles size={18}/> Rutina con IA
                </Button>
-               <Button onClick={() => setView('manual-workout')} className="w-full" variant="secondary">
+               <Button onClick={() => setView('manual-workout')} disabled={!!inProgressWorkout} className="w-full" variant="secondary">
                    <Dumbbell size={18}/> Rutina Manual
                </Button>
            </div>
@@ -437,6 +437,18 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
           </Button>
         </Card>
       </div>
+      
+      {inProgressWorkout && (
+          <Card className="bg-blue-900/50 border-2 border-blue-500 animate-pulse-slow">
+            <h3 className="font-bold text-xl text-white">Rutina en Progreso</h3>
+            <p className="text-blue-200 mt-2">
+              Tienes una rutina {inProgressWorkout.type === 'ai' ? 'generada por IA' : 'manual'} pendiente de finalizar.
+            </p>
+            <Button onClick={() => setView('ai-workout')} className="w-full mt-4">
+              Continuar Rutina
+            </Button>
+          </Card>
+      )}
 
       <Card>
         <div className="flex justify-between items-center mb-4">
@@ -563,7 +575,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
                             dataKey="y"
                             name="time"
                             domain={[0, 1440]}
-                            reversed={false}
+                            reversed={true}
                             tickCount={5}
                             tickFormatter={(minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`}
                             fontSize={12}
@@ -1117,11 +1129,35 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     const [isActive, setIsActive] = useState(false);
     const [inputSeconds, setInputSeconds] = useState(initialSeconds);
     const timerRef = useRef(null);
+    const audioContextRef = useRef(null);
+
+    const playBeep = (frequency, duration) => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const oscillator = audioContextRef.current.createOscillator();
+        const gainNode = audioContextRef.current.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContextRef.current.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, audioContextRef.current.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioContextRef.current.currentTime);
+        
+        oscillator.start();
+        oscillator.stop(audioContextRef.current.currentTime + duration / 1000);
+    };
 
     useEffect(() => {
-        setSeconds(initialSeconds);
-        setInputSeconds(initialSeconds);
-    }, [initialSeconds]);
+        if (isActive && direction === 'down') {
+            if (seconds > 0 && seconds <= 10) {
+                playBeep(440, 100); // Beep for last 10 seconds
+            }
+            if (seconds === 0) {
+                 playBeep(880, 200); // Final beep
+            }
+        }
+    }, [seconds, isActive, direction]);
 
     useEffect(() => {
         if (isActive) {
@@ -1203,7 +1239,7 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     );
 };
 
-const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, handleSaveWorkout, routine, setRoutine, handleToggleFavorite }) => {
+const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, inProgressWorkout, setInProgressWorkout, handleToggleFavorite, handleClearInProgressWorkout }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [fatigueLevel, setFatigueLevel] = useState('normal');
@@ -1211,12 +1247,13 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
     const [restTime, setRestTime] = useState(90);
     const [recalculatingIndex, setRecalculatingIndex] = useState(null);
 
+    const routine = inProgressWorkout ? inProgressWorkout.exercises : [];
+
     const getWorkoutSuggestion = async () => {
         setIsLoading(true);
-        setRoutine([]);
         setError('');
 
-        const historySummary = Array.isArray(completedWorkouts) ? completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
+        const historySummary = Array.isArray(userData.completedWorkouts) ? userData.completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
@@ -1262,9 +1299,10 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
             const resultText = await callGeminiAPI(prompt, generationConfig);
             const parsedJson = parseJsonFromMarkdown(resultText);
             const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
-            setRoutine(editableRoutine);
             if (!parsedJson.routine || parsedJson.routine.length === 0) {
                 setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
+            } else {
+                setInProgressWorkout({ type: 'ai', exercises: editableRoutine });
             }
         } catch (err) {
             setError(`Ocurrió un error al contactar al asistente de IA. Error: ${err.message}`);
@@ -1287,7 +1325,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
             const newCalories = await callGeminiAPI(prompt);
             const updatedRoutine = [...routine];
             updatedRoutine[exerciseIndex].caloriesBurned = newCalories.trim();
-            setRoutine(updatedRoutine);
+            setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine });
         } catch (error) {
             console.error("Error recalculating calories:", error);
         } finally {
@@ -1298,23 +1336,23 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
     const handleExerciseUpdate = (index, field, value) => {
         const updatedRoutine = [...routine];
         updatedRoutine[index][field] = value;
-        setRoutine(updatedRoutine);
+        setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine });
     };
 
     const handleToggleComplete = (index) => {
         const updatedRoutine = [...routine];
         updatedRoutine[index].completed = !updatedRoutine[index].completed;
-        setRoutine(updatedRoutine);
+        setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine });
     };
 
     const handleDeleteExercise = (indexToDelete) => {
         const updatedRoutine = routine.filter((_, index) => index !== indexToDelete);
-        setRoutine(updatedRoutine);
+        setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine });
     };
 
     const handleFinishAndSave = () => {
         handleSaveWorkout(routine);
-        setRoutine([]);
+        handleClearInProgressWorkout();
         handleGoBack();
     };
 
@@ -1337,9 +1375,9 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Generador de Rutina con IA</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
+            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Rutina Activa</h2><Button onClick={handleGoBack} variant="secondary">Abandonar</Button></div>
             
-            {routine.length === 0 && (
+            {!inProgressWorkout && (
                 <Card>
                     <div className="space-y-4">
                         <h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3>
@@ -1366,7 +1404,7 @@ const AiWorkoutGeneratorView = ({ userData, completedWorkouts, handleGoBack, han
             {isLoading && <div className="mt-6 text-center p-4"><p className="animate-pulse text-lg">El entrenador IA está preparando tu sesión...</p></div>}
             {error && <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg">{error}</div>}
 
-            {Array.isArray(routine) && routine.length > 0 && (
+            {inProgressWorkout && Array.isArray(routine) && routine.length > 0 && (
                 <div className="mt-6 space-y-4">
                     <h3 className="text-xl font-bold text-center">Tu Rutina de Hoy</h3>
                     <Card>
@@ -1679,11 +1717,9 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
 };
 
 // --- NUEVO COMPONENTE: ManualWorkoutGenerator ---
-const ManualWorkoutGenerator = ({ userData, handleGoBack, handleSaveWorkout, handleToggleFavorite }) => {
-    const [routine, setRoutine] = useState([]);
-    const [view, setView] = useState('selector'); // 'selector' o 'editor'
+const ManualWorkoutGenerator = ({ userData, handleGoBack, setInProgressWorkout, setView, handleToggleFavorite }) => {
     const [selectedMuscle, setSelectedMuscle] = useState('Todos');
-    const [selectedExercises, setSelectedExercises] = useState({}); // { [exercise.name]: boolean }
+    const [selectedExercises, setSelectedExercises] = useState({});
 
     const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
 
@@ -1702,78 +1738,63 @@ const ManualWorkoutGenerator = ({ userData, handleGoBack, handleSaveWorkout, han
     };
 
     const handleCreateRoutine = () => {
-        const newRoutine = favoriteExercises
+        const newRoutineExercises = favoriteExercises
             .filter(ex => selectedExercises[ex.name])
-            .map(ex => ({ ...ex, completed: false })); // Copia el ejercicio y añade 'completed'
-        setRoutine(newRoutine);
-        setView('editor');
+            .map(ex => ({ ...ex, completed: false }));
+        setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises });
+        setView('ai-workout');
     };
 
-    if (view === 'selector') {
-        return (
-            <div>
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina Manual</h2>
-                    <Button onClick={handleGoBack} variant="secondary">Volver</Button>
-                </div>
-                <Card>
-                    <h3 className="font-bold text-lg mb-4">1. Filtra y selecciona tus ejercicios favoritos</h3>
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium mb-1">Filtrar por grupo muscular</label>
-                        <select
-                            value={selectedMuscle}
-                            onChange={(e) => setSelectedMuscle(e.target.value)}
-                            className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg"
-                        >
-                            {muscleGroups.map(group => <option key={group} value={group}>{group}</option>)}
-                        </select>
-                    </div>
-                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                        {filteredExercises.length > 0 ? filteredExercises.map(ex => (
-                            <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
-                                <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}>
-                                    <input
-                                        type="checkbox"
-                                        readOnly
-                                        checked={!!selectedExercises[ex.name]}
-                                        className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"
-                                    />
-                                    <span className="ml-3 font-semibold">{ex.name}</span>
-                                </div>
-                                <div className="flex items-center flex-shrink-0 ml-auto">
-                                    <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-full">{ex.muscleGroup || 'N/A'}</span>
-                                    <button
-                                        onClick={() => handleToggleFavorite(ex)}
-                                        className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1"
-                                        aria-label={`Eliminar ${ex.name} de favoritos`}
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            </div>
-                        )) : (
-                            <p className="text-center text-gray-500 p-4">No tienes ejercicios favoritos en este grupo. ¡Añade algunos desde la rutina con IA!</p>
-                        )}
-                    </div>
-                     <Button onClick={handleCreateRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6">
-                        <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
-                    </Button>
-                </Card>
-            </div>
-        );
-    }
-
-    // Si la vista es 'editor', reutilizamos la lógica y UI de AiWorkoutGeneratorView
     return (
-        <AiWorkoutGeneratorView
-            userData={userData}
-            completedWorkouts={[]} // No es relevante aquí
-            handleGoBack={() => setView('selector')}
-            handleSaveWorkout={handleSaveWorkout}
-            routine={routine}
-            setRoutine={setRoutine}
-            handleToggleFavorite={handleToggleFavorite}
-        />
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina Manual</h2>
+                <Button onClick={handleGoBack} variant="secondary">Volver</Button>
+            </div>
+            <Card>
+                <h3 className="font-bold text-lg mb-4">1. Filtra y selecciona tus ejercicios favoritos</h3>
+                <div className="mb-4">
+                    <label className="block text-sm font-medium mb-1">Filtrar por grupo muscular</label>
+                    <select
+                        value={selectedMuscle}
+                        onChange={(e) => setSelectedMuscle(e.target.value)}
+                        className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg"
+                    >
+                        {muscleGroups.map(group => <option key={group} value={group}>{group}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                    {filteredExercises.length > 0 ? filteredExercises.map(ex => (
+                        <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                            <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}>
+                                <input
+                                    type="checkbox"
+                                    readOnly
+                                    checked={!!selectedExercises[ex.name]}
+                                    className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"
+                                />
+                                <span className="ml-3 font-semibold">{ex.name}</span>
+                            </div>
+                            <div className="flex items-center flex-shrink-0 ml-auto">
+                                <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-full">{ex.muscleGroup || 'N/A'}</span>
+                                <button
+                                    onClick={() => handleToggleFavorite(ex)}
+                                    className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1"
+                                    aria-label={`Eliminar ${ex.name} de favoritos`}
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )) : (
+                        <p className="text-center text-gray-500 p-4">No tienes ejercicios favoritos en este grupo. ¡Añade algunos desde la rutina con IA!</p>
+                    )}
+                </div>
+                 <Button onClick={handleCreateRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6">
+                    <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
+                </Button>
+            </Card>
+        </div>
     );
 };
 
@@ -1903,7 +1924,7 @@ export default function App() {
     const [bodyMeasurements, setBodyMeasurements] = useState([]);
     const [completedWorkouts, setCompletedWorkouts] = useState([]);
     const [creatineLog, setCreatineLog] = useState([]);
-    const [currentAiRoutine, setCurrentAiRoutine] = useState([]);
+    const [inProgressWorkout, setInProgressWorkout] = useState(null);
 
     useEffect(() => {
         const auth = getAuth(app);
@@ -1987,8 +2008,15 @@ export default function App() {
             const unsubMeasurements = onSnapshot(collection(db, `${userDocPath}/bodyMeasurements`), (snap) => setBodyMeasurements(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
             const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
             const unsubCreatine = onSnapshot(collection(db, `${userDocPath}/creatineLog`), (snap) => setCreatineLog(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => b.date.toDate() - a.date.toDate())));
+            const unsubInProgress = onSnapshot(doc(db, `${userDocPath}/inProgressWorkout/current`), (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    setInProgressWorkout(docSnapshot.data());
+                } else {
+                    setInProgressWorkout(null);
+                }
+            });
 
-            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); };
+            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
         }
     }, [isAuthReady, firebaseServices, user, handleAddFoodToDb]);
 
@@ -2046,7 +2074,7 @@ export default function App() {
         setBodyMeasurements([]);
         setCompletedWorkouts([]);
         setCreatineLog([]);
-        setCurrentAiRoutine([]);
+        setInProgressWorkout(null);
         if (typeof __firebase_config !== 'undefined') {
              await signInAnonymously(auth);
         }
@@ -2094,6 +2122,19 @@ export default function App() {
         await updateDoc(logDocRef, dataToSave);
     };
 
+    const handleSetInProgressWorkout = async (workoutData) => {
+        if (!firebaseServices || !user) return;
+        const inProgressRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/inProgressWorkout/current`);
+        await setDoc(inProgressRef, workoutData);
+    };
+
+    const handleClearInProgressWorkout = async () => {
+        if (!firebaseServices || !user) return;
+        const inProgressRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/inProgressWorkout/current`);
+        await deleteDoc(inProgressRef);
+        setView('dashboard');
+    };
+
     const handleAddMeasurements = async (measurements) => {
         if (!firebaseServices || !user) return;
         const measurementLog = { date: new Date().toISOString().slice(0, 10), ...measurements };
@@ -2125,6 +2166,19 @@ export default function App() {
     }
 
     const renderView = () => {
+        if (inProgressWorkout && view !== 'dashboard') {
+             return <AiWorkoutGeneratorView
+                userData={userData}
+                completedWorkouts={completedWorkouts}
+                handleGoBack={handleClearInProgressWorkout}
+                handleSaveWorkout={handleSaveWorkout}
+                inProgressWorkout={inProgressWorkout}
+                setInProgressWorkout={handleSetInProgressWorkout}
+                handleToggleFavorite={handleToggleFavorite}
+                handleClearInProgressWorkout={handleClearInProgressWorkout}
+            />;
+        }
+
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
@@ -2132,10 +2186,10 @@ export default function App() {
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} firebaseServices={firebaseServices} user={user} />;
-            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
-            case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} handleToggleFavorite={handleToggleFavorite} />;
+            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
+            case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} handleToggleFavorite={handleToggleFavorite} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
-            default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} />;
+            default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} inProgressWorkout={inProgressWorkout} />;
         }
     };
 
