@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, BrainCircuit } from 'lucide-react';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, BrainCircuit, TestTube2 } from 'lucide-react';
 
 // --- FUNCIÓN AUXILIAR ---
 // Función para quitar tildes y normalizar strings para comparaciones
@@ -181,10 +181,12 @@ const DashboardSkeleton = () => (
 
 // --- VISTAS PRINCIPALES DE LA APLICACIÓN ---
 
-const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFood }) => {
+const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCreatine, creatineLog }) => {
   const [timeFilter, setTimeFilter] = useState('week');
+  const [creatineTimeFilter, setCreatineTimeFilter] = useState('week');
   const [aiRecommendation, setAiRecommendation] = useState({ text: 'Obtén una recomendación de nutrición para tu entrenamiento de hoy.', loading: false });
   const [activityChartView, setActivityChartView] = useState('volume'); // 'volume' o 'muscle'
+  const [creatineStatus, setCreatineStatus] = useState('idle');
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
@@ -318,6 +320,46 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
 
     return [];
   }, [filteredData, activityChartView]);
+
+  const creatineChartData = useMemo(() => {
+      const now = new Date();
+      let startDate;
+      switch (creatineTimeFilter) {
+        case 'month':
+            startDate = new Date(new Date().setMonth(now.getMonth() - 1));
+            break;
+        case 'year':
+            startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
+            break;
+        case 'week':
+        default:
+            startDate = new Date(new Date().setDate(now.getDate() - 7));
+            break;
+      }
+      
+      const filteredLogs = (creatineLog || []).filter(log => log.date.toDate() >= startDate);
+      
+      return filteredLogs.map(log => {
+          const date = log.date.toDate();
+          return {
+              x: date.getTime(),
+              y: date.getHours() * 60 + date.getMinutes()
+          };
+      });
+  }, [creatineLog, creatineTimeFilter]);
+
+
+  const onLogCreatine = async () => {
+    setCreatineStatus('saving');
+    try {
+        await handleLogCreatine();
+        setCreatineStatus('saved');
+        setTimeout(() => setCreatineStatus('idle'), 2000);
+    } catch (error) {
+        console.error("Error logging creatine:", error);
+        setCreatineStatus('idle');
+    }
+  };
 
 
   if (!userData) {
@@ -480,9 +522,69 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogFo
             <MacroProgress label="Grasas" current={totals.fat} goal={goals.fat} color="bg-green-500" />
           </div>
         </div>
-         <Button onClick={() => setView('food')} className="w-full mt-6">
-            <PlusCircle size={18}/> Registrar Comida
-        </Button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+            <Button onClick={() => setView('food')} className="w-full">
+                <PlusCircle size={18}/> Registrar Comida
+            </Button>
+            <Button onClick={onLogCreatine} disabled={creatineStatus !== 'idle'} className="w-full" variant={creatineStatus === 'saved' ? 'success' : 'secondary'}>
+                <TestTube2 size={18}/>
+                {creatineStatus === 'idle' && 'Registrar Toma de Creatina'}
+                {creatineStatus === 'saving' && 'Registrando...'}
+                {creatineStatus === 'saved' && '¡Registrado!'}
+            </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Historial de Creatina</h3>
+            <div className="flex gap-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
+                <button onClick={() => setCreatineTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
+                <button onClick={() => setCreatineTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
+                <button onClick={() => setCreatineTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
+            </div>
+        </div>
+        <div className="h-60">
+            {creatineChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                        <XAxis
+                            type="number"
+                            dataKey="x"
+                            name="date"
+                            domain={['dataMin', 'dataMax']}
+                            scale="time"
+                            tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}
+                            fontSize={12}
+                        />
+                        <YAxis
+                            type="number"
+                            dataKey="y"
+                            name="time"
+                            domain={[0, 1440]}
+                            reversed={true}
+                            tickCount={5}
+                            tickFormatter={(minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`}
+                            fontSize={12}
+                        />
+                        <Tooltip
+                            cursor={{ strokeDasharray: '3 3' }}
+                            contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}
+                            formatter={(value, name, props) => {
+                                if(name === 'time') return new Date(props.payload.x).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'});
+                                return value;
+                            }}
+                        />
+                        <Scatter name="Toma de Creatina" data={creatineChartData} fill="#8884d8" />
+                    </ScatterChart>
+                </ResponsiveContainer>
+            ) : (
+                 <div className="flex items-center justify-center h-full text-gray-500">
+                        <p>No hay registros de creatina en este período.</p>
+                 </div>
+            )}
+        </div>
       </Card>
     </div>
   );
@@ -1425,7 +1527,7 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
 };
 
 
-const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog }) => {
+const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog, firebaseServices, user }) => {
     const [editingWorkout, setEditingWorkout] = useState(null);
     const [timeFilter, setTimeFilter] = useState('week');
     const [muscleData, setMuscleData] = useState([]);
@@ -1446,44 +1548,49 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     }, [completedWorkouts, timeFilter]);
 
     const handleAnalyzeMuscles = async () => {
-        if (filteredWorkouts.length === 0) {
-            setMuscleData([]);
+        const workoutsToAnalyze = filteredWorkouts.filter(w => w.exercises.some(ex => !ex.muscleGroup));
+        if (workoutsToAnalyze.length === 0) {
+            alert("Todos los entrenamientos en este período ya han sido analizados.");
+            setLoadingAnalysis(false);
             return;
         }
+
         setLoadingAnalysis(true);
         setAnalysisError('');
-        const exerciseNames = [...new Set(filteredWorkouts.flatMap(w => (Array.isArray(w.exercises) ? w.exercises.map(e => e.name) : [])))];
-        const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${exerciseNames.join(', ')}`;
-        
+
+        const allExerciseNames = [...new Set(workoutsToAnalyze.flatMap(w => w.exercises.map(e => e.name)))];
+        const prompt = `Para la siguiente lista de ejercicios, devuelve el principal grupo muscular trabajado para cada uno. Responde con un objeto JSON donde la clave es el nombre del ejercicio y el valor es el grupo muscular (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core"). Ejercicios: ${allExerciseNames.join(', ')}`;
+
         try {
             const resultText = await callGeminiAPI(prompt);
             const muscleMap = parseJsonFromMarkdown(resultText);
 
-            const muscleCounts = {};
-            filteredWorkouts.forEach(workout => {
-                (workout.exercises || []).forEach(exercise => {
-                    const muscle = muscleMap[exercise.name] || 'Otro';
-                    if (!muscleCounts[muscle]) {
-                        muscleCounts[muscle] = { series: 0, repeticiones: 0 };
+            const { db } = firebaseServices;
+            const userId = user.uid;
+            const batch = writeBatch(db);
+
+            workoutsToAnalyze.forEach(workout => {
+                const updatedExercises = workout.exercises.map(ex => {
+                    if (!ex.muscleGroup && muscleMap[ex.name]) {
+                        return { ...ex, muscleGroup: muscleMap[ex.name] };
                     }
-                    const sets = parseInt(exercise.sets, 10) || 0;
-                    const reps = parseInt(String(exercise.reps).split('-')[0], 10) || 0;
-                    
-                    muscleCounts[muscle].series += sets;
-                    muscleCounts[muscle].repeticiones += sets * reps;
+                    return ex;
                 });
+                const workoutRef = doc(db, `artifacts/${appId}/users/${userId}/completedWorkouts`, workout.id);
+                batch.update(workoutRef, { exercises: updatedExercises });
             });
 
-            setMuscleData(Object.entries(muscleCounts).map(([name, data]) => ({ name, ...data })));
+            await batch.commit();
+            alert("¡Análisis completado! Los grupos musculares de tus entrenamientos antiguos han sido actualizados.");
 
         } catch (error) {
-            console.error("Error analyzing muscles:", error);
-            setAnalysisError("No se pudo analizar la actividad. La IA podría estar sobrecargada. Inténtalo más tarde.");
-            setMuscleData([]);
+            console.error("Error analyzing and updating muscles:", error);
+            setAnalysisError("No se pudo analizar y actualizar la actividad. La IA podría estar sobrecargada. Inténtalo más tarde.");
         } finally {
             setLoadingAnalysis(false);
         }
     };
+
 
     const handleSaveEdit = async (id, data) => {
         try {
@@ -1513,7 +1620,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
                 </div>
                 <div className="mb-4">
                     <Button onClick={handleAnalyzeMuscles} disabled={loadingAnalysis} className="w-full">
-                        {loadingAnalysis ? 'Analizando...' : 'Analizar Músculos Trabajados'}
+                        {loadingAnalysis ? 'Analizando y Actualizando...' : 'Analizar y Actualizar Datos Antiguos'}
                     </Button>
                 </div>
                 {loadingAnalysis && <p className="text-center animate-pulse">Analizando...</p>}
@@ -1790,6 +1897,7 @@ export default function App() {
     const [foodDatabase, setFoodDatabase] = useState([]);
     const [bodyMeasurements, setBodyMeasurements] = useState([]);
     const [completedWorkouts, setCompletedWorkouts] = useState([]);
+    const [creatineLog, setCreatineLog] = useState([]);
     const [currentAiRoutine, setCurrentAiRoutine] = useState([]);
 
     useEffect(() => {
@@ -1873,8 +1981,9 @@ export default function App() {
             });
             const unsubMeasurements = onSnapshot(collection(db, `${userDocPath}/bodyMeasurements`), (snap) => setBodyMeasurements(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
             const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
+            const unsubCreatine = onSnapshot(collection(db, `${userDocPath}/creatineLog`), (snap) => setCreatineLog(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => b.date.toDate() - a.date.toDate())));
 
-            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); };
+            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); };
         }
     }, [isAuthReady, firebaseServices, user, handleAddFoodToDb]);
 
@@ -1931,6 +2040,7 @@ export default function App() {
         setFoodDatabase([]);
         setBodyMeasurements([]);
         setCompletedWorkouts([]);
+        setCreatineLog([]);
         setCurrentAiRoutine([]);
         if (typeof __firebase_config !== 'undefined') {
              await signInAnonymously(auth);
@@ -1960,6 +2070,11 @@ export default function App() {
     const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
     const handleDeleteFood = async (foodId) => { if (!firebaseServices || !user) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/foodDatabase`, foodId)); };
     const handleAddFood = async (foodData) => { await handleAddFoodToDb(foodData); };
+    
+    const handleLogCreatine = async () => {
+        if (!firebaseServices || !user) return;
+        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/creatineLog`), { date: Timestamp.now() });
+    };
     
     const handleSaveWorkout = async (workoutData) => {
         if (!firebaseServices || !user) return;
@@ -2011,11 +2126,11 @@ export default function App() {
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
-            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} />;
+            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} firebaseServices={firebaseServices} user={user} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} routine={currentAiRoutine} setRoutine={setCurrentAiRoutine} handleToggleFavorite={handleToggleFavorite} />;
             case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} handleToggleFavorite={handleToggleFavorite} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
-            default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} setView={setView} handleLogFood={handleLogFood} />;
+            default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} />;
         }
     };
 
