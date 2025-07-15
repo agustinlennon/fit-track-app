@@ -1930,43 +1930,24 @@ export default function App() {
         const db = getFirestore(app);
         setFirebaseServices({ auth, db, app });
 
-        const authUnsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-            if (!isAuthReady) {
-                setIsAuthReady(true);
+        const authUnsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setUser(user);
+            } else {
+                setUser(null);
+                if (typeof __firebase_config !== 'undefined') {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (error) {
+                        console.error("Anonymous sign-in failed after logout:", error);
+                    }
+                }
             }
+            setIsAuthReady(true);
         });
 
-        (async () => {
-            try {
-                if (auth.currentUser) {
-                    setIsAuthReady(true);
-                    return;
-                }
-                
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else if (typeof __firebase_config !== 'undefined') {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Automatic sign-in failed:", error);
-            } finally {
-                setIsAuthReady(true);
-            }
-        })();
-
-        return () => {
-            authUnsubscribe();
-        };
+        return () => authUnsubscribe();
     }, []);
-
-    const handleAddFoodToDb = useCallback(async (foodData) => {
-        if (!firebaseServices || !user) return;
-        const { db } = firebaseServices;
-        const userId = user.uid;
-        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodDatabase`), foodData);
-    }, [firebaseServices, user]);
 
     useEffect(() => {
         if (isAuthReady && firebaseServices && user) {
@@ -1975,11 +1956,12 @@ export default function App() {
             const userDocPath = `artifacts/${appId}/users/${userId}`;
             const userDocRef = doc(db, `${userDocPath}/profile/data`);
 
-            const setupUser = async () => {
-                const docSnap = await getDoc(userDocRef);
-                if (!docSnap.exists()) {
+            const unsubUser = onSnapshot(userDocRef, async (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
+                } else if (!user.isAnonymous) {
                     const initialData = {
-                        name: user.isAnonymous ? "Invitado" : user.displayName || user.email || "Atleta",
+                        name: user.displayName || user.email || "Atleta",
                         email: user.email,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
                         objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
@@ -1996,26 +1978,14 @@ export default function App() {
                         }
                     };
                     await setDoc(userDocRef, initialData);
-                }
-            };
-
-            setupUser();
-
-            const unsubUser = onSnapshot(userDocRef, (docSnapshot) => {
-                if (docSnapshot.exists()) {
-                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
+                } else {
+                     setUserData({ name: "Invitado" });
                 }
             });
 
             const unsubLogs = onSnapshot(collection(db, `${userDocPath}/dailyLogs`), (snap) => setDailyLog(snap.docs.reduce((acc, doc) => ({...acc, [doc.id]: doc.data() }), {})));
             const unsubWeight = onSnapshot(collection(db, `${userDocPath}/weightHistory`), (snap) => setWeightHistory(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
-            const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => {
-                const foods = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-                setFoodDatabase(foods);
-                if (foods.length === 0 && !user.isAnonymous) {
-                    [{ name: 'Pechuga de Pollo', c: 165, p: 31, h: 0, g: 3.6 }, { name: 'Arroz Blanco Cocido', c: 130, p: 2.7, h: 28, g: 0.3 }, { name: 'Huevo Entero', c: 155, p: 13, h: 1.1, g: 11 }, { name: 'Avena en Hojuelas', c: 389, p: 16.9, h: 66.3, g: 6.9 }].forEach(f => handleAddFoodToDb({name:f.name, calories_per_100g: f.c, protein_per_100g: f.p, carbs_per_100g: f.h, fat_per_100g: f.g}));
-                }
-            });
+            const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => setFoodDatabase(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
             const unsubMeasurements = onSnapshot(collection(db, `${userDocPath}/bodyMeasurements`), (snap) => setBodyMeasurements(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
             const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
             const unsubCreatine = onSnapshot(collection(db, `${userDocPath}/creatineLog`), (snap) => setCreatineLog(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => b.date.toDate() - a.date.toDate())));
@@ -2028,10 +1998,18 @@ export default function App() {
             });
 
             return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
-        } else {
+        } else if (!user) {
+            // Clear all data when user logs out
             setUserData(null);
+            setDailyLog({});
+            setWeightHistory([]);
+            setFoodDatabase([]);
+            setBodyMeasurements([]);
+            setCompletedWorkouts([]);
+            setCreatineLog([]);
+            setInProgressWorkout(null);
         }
-    }, [isAuthReady, firebaseServices, user, handleAddFoodToDb]);
+    }, [isAuthReady, firebaseServices, user]);
 
     const handleRegister = async (email, password, name) => {
         const { auth, db } = firebaseServices;
@@ -2078,19 +2056,10 @@ export default function App() {
     };
 
     const handleLogout = async () => {
+        if (!firebaseServices) return;
         const { auth } = firebaseServices;
         await signOut(auth);
-        setUserData(null);
-        setDailyLog({});
-        setWeightHistory([]);
-        setFoodDatabase([]);
-        setBodyMeasurements([]);
-        setCompletedWorkouts([]);
-        setCreatineLog([]);
-        setInProgressWorkout(null);
-        if (typeof __firebase_config !== 'undefined') {
-             await signInAnonymously(auth);
-        }
+        setView('dashboard');
     };
 
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
@@ -2174,7 +2143,7 @@ export default function App() {
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
-    if (!isAuthReady || !firebaseServices || !user || !userData) {
+    if (!isAuthReady || !userData) {
         return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900"><div className="text-center"><Flame className="mx-auto h-12 w-12 text-blue-600 animate-pulse" /><p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Inicializando FitTrack AI...</p></div></div>;
     }
 
@@ -2245,4 +2214,3 @@ export default function App() {
         </div>
     );
 }
-
