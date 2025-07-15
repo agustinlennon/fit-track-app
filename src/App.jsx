@@ -2166,19 +2166,6 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && view !== 'dashboard') {
-             return <AiWorkoutGeneratorView
-                userData={userData}
-                completedWorkouts={completedWorkouts}
-                handleGoBack={handleClearInProgressWorkout}
-                handleSaveWorkout={handleSaveWorkout}
-                inProgressWorkout={inProgressWorkout}
-                setInProgressWorkout={handleSetInProgressWorkout}
-                handleToggleFavorite={handleToggleFavorite}
-                handleClearInProgressWorkout={handleClearInProgressWorkout}
-            />;
-        }
-
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
@@ -2186,8 +2173,8 @@ export default function App() {
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} firebaseServices={firebaseServices} user={user} />;
-            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
-            case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} handleSaveWorkout={handleSaveWorkout} handleToggleFavorite={handleToggleFavorite} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} />;
+            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} handleGoBack={handleClearInProgressWorkout} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
+            case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} handleToggleFavorite={handleToggleFavorite} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} inProgressWorkout={inProgressWorkout} />;
         }
