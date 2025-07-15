@@ -1950,56 +1950,8 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (isAuthReady && firebaseServices && user) {
-            const { db } = firebaseServices;
-            const userId = user.uid;
-            const userDocPath = `artifacts/${appId}/users/${userId}`;
-            const userDocRef = doc(db, `${userDocPath}/profile/data`);
-
-            const unsubUser = onSnapshot(userDocRef, async (docSnapshot) => {
-                if (docSnapshot.exists()) {
-                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
-                } else if (!user.isAnonymous) {
-                    const initialData = {
-                        name: user.displayName || user.email || "Atleta",
-                        email: user.email,
-                        goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
-                        objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
-                        workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
-                        favoriteExercises: [],
-                        workoutSchedule: { 
-                            lunes: [{time: '18:00', name: 'Pesas - Tren Superior'}],
-                            martes: [{time: '19:00', name: 'Pesas - Tren Inferior'}],
-                            miercoles: [{time: '18:00', name: 'Natación'}],
-                            jueves: [{time: '19:00', name: 'Pesas - Tren Superior'}],
-                            viernes: [{time: '19:00', name: 'Pesas - Tren Inferior'}],
-                            sabado: [{time: '11:00', name: 'Fútbol'}],
-                            domingo: []
-                        }
-                    };
-                    await setDoc(userDocRef, initialData);
-                } else {
-                     setUserData({ name: "Invitado" });
-                }
-            });
-
-            const unsubLogs = onSnapshot(collection(db, `${userDocPath}/dailyLogs`), (snap) => setDailyLog(snap.docs.reduce((acc, doc) => ({...acc, [doc.id]: doc.data() }), {})));
-            const unsubWeight = onSnapshot(collection(db, `${userDocPath}/weightHistory`), (snap) => setWeightHistory(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
-            const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => setFoodDatabase(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
-            const unsubMeasurements = onSnapshot(collection(db, `${userDocPath}/bodyMeasurements`), (snap) => setBodyMeasurements(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
-            const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
-            const unsubCreatine = onSnapshot(collection(db, `${userDocPath}/creatineLog`), (snap) => setCreatineLog(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => b.date.toDate() - a.date.toDate())));
-            const unsubInProgress = onSnapshot(doc(db, `${userDocPath}/inProgressWorkout/current`), (docSnapshot) => {
-                if (docSnapshot.exists()) {
-                    setInProgressWorkout(docSnapshot.data());
-                } else {
-                    setInProgressWorkout(null);
-                }
-            });
-
-            return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
-        } else if (!user) {
-            // Clear all data when user logs out
+        if (!isAuthReady || !firebaseServices || !user) {
+            // Clear all data if user logs out or is not ready
             setUserData(null);
             setDailyLog({});
             setWeightHistory([]);
@@ -2008,28 +1960,70 @@ export default function App() {
             setCompletedWorkouts([]);
             setCreatineLog([]);
             setInProgressWorkout(null);
+            return;
         }
+
+        const { db } = firebaseServices;
+        const userId = user.uid;
+        const userDocPath = `artifacts/${appId}/users/${userId}`;
+        const userDocRef = doc(db, `${userDocPath}/profile/data`);
+
+        const setupUser = async () => {
+            const docSnap = await getDoc(userDocRef);
+            if (!docSnap.exists() && !user.isAnonymous) {
+                const initialData = {
+                    name: user.displayName || user.email || "Atleta",
+                    email: user.email,
+                    goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
+                    objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
+                    workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
+                    favoriteExercises: [],
+                    workoutSchedule: { 
+                        lunes: [{time: '18:00', name: 'Pesas - Tren Superior'}],
+                        martes: [{time: '19:00', name: 'Pesas - Tren Inferior'}],
+                        miercoles: [{time: '18:00', name: 'Natación'}],
+                        jueves: [{time: '19:00', name: 'Pesas - Tren Superior'}],
+                        viernes: [{time: '19:00', name: 'Pesas - Tren Inferior'}],
+                        sabado: [{time: '11:00', name: 'Fútbol'}],
+                        domingo: []
+                    }
+                };
+                await setDoc(userDocRef, initialData);
+            }
+        };
+
+        if(!user.isAnonymous) setupUser();
+
+        const unsubUser = onSnapshot(userDocRef, (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
+            } else if (user.isAnonymous) {
+                setUserData({ name: "Invitado", isAnonymous: true });
+            }
+        });
+
+        const unsubLogs = onSnapshot(collection(db, `${userDocPath}/dailyLogs`), (snap) => setDailyLog(snap.docs.reduce((acc, doc) => ({...acc, [doc.id]: doc.data() }), {})));
+        const unsubWeight = onSnapshot(collection(db, `${userDocPath}/weightHistory`), (snap) => setWeightHistory(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
+        const unsubFood = onSnapshot(collection(db, `${userDocPath}/foodDatabase`), (snap) => setFoodDatabase(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
+        const unsubMeasurements = onSnapshot(collection(db, `${userDocPath}/bodyMeasurements`), (snap) => setBodyMeasurements(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(a.date) - new Date(b.date))));
+        const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
+        const unsubCreatine = onSnapshot(collection(db, `${userDocPath}/creatineLog`), (snap) => setCreatineLog(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => b.date.toDate() - a.date.toDate())));
+        const unsubInProgress = onSnapshot(doc(db, `${userDocPath}/inProgressWorkout/current`), (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                setInProgressWorkout(docSnapshot.data());
+            } else {
+                setInProgressWorkout(null);
+            }
+        });
+
+        return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
+        
     }, [isAuthReady, firebaseServices, user]);
 
     const handleRegister = async (email, password, name) => {
         const { auth, db } = firebaseServices;
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        const userId = user.uid;
-        const initialData = {
-            name: name,
-            email: user.email,
-            goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
-            objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
-            workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
-            favoriteExercises: [],
-            workoutSchedule: { 
-                lunes: [{time: '18:00', name: 'Natación'}], martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
-                miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], jueves: [{time: '20:00', name: 'Fútbol'}], 
-                viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
-            }
-        };
-        await setDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), initialData);
+        // The useEffect will handle profile creation
     };
 
     const handleLogin = async (email, password) => {
