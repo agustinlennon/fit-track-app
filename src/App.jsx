@@ -2142,16 +2142,9 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && (view === 'ai-workout' || view === 'manual-workout')) {
-             return <AiWorkoutGeneratorView
-                userData={userData}
-                handleGoBack={handleClearInProgressWorkout}
-                handleSaveWorkout={handleSaveWorkout}
-                inProgressWorkout={inProgressWorkout}
-                setInProgressWorkout={handleSetInProgressWorkout}
-                handleToggleFavorite={handleToggleFavorite}
-                handleClearInProgressWorkout={handleClearInProgressWorkout}
-            />;
+        if (inProgressWorkout && view !== 'ai-workout' && view !== 'manual-workout') {
+             // Don't force redirect, let the user navigate freely.
+             // The dashboard will show the "in progress" card.
         }
 
         switch (view) {
@@ -2169,7 +2162,14 @@ export default function App() {
     };
 
     const NavItem = ({ icon: Icon, label, viewName }) => (
-        <button onClick={() => setView(viewName)} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => {
+            if (inProgressWorkout && (viewName === 'ai-workout' || viewName === 'manual-workout')) {
+                // If a workout is in progress, these buttons should lead to it.
+                setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout');
+            } else {
+                setView(viewName);
+            }
+        }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             <Icon size={22} /><span className="text-xs sm:text-base font-medium">{label}</span>
         </button>
     );
