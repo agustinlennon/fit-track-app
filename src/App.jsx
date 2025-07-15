@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, BrainCircuit, TestTube2 } from 'lucide-react';
 
@@ -444,7 +444,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
             <p className="text-blue-200 mt-2">
               Tienes una rutina {inProgressWorkout.type === 'ai' ? 'generada por IA' : 'manual'} pendiente de finalizar.
             </p>
-            <Button onClick={() => setView('ai-workout')} className="w-full mt-4">
+            <Button onClick={() => setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout')} className="w-full mt-4">
               Continuar Rutina
             </Button>
           </Card>
@@ -1353,7 +1353,6 @@ const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, inP
     const handleFinishAndSave = () => {
         handleSaveWorkout(routine);
         handleClearInProgressWorkout();
-        handleGoBack();
     };
 
     const totalCaloriesBurned = useMemo(() => {
@@ -1974,25 +1973,37 @@ export default function App() {
             const { db } = firebaseServices;
             const userId = user.uid;
             const userDocPath = `artifacts/${appId}/users/${userId}`;
-            
-            const unsubUser = onSnapshot(doc(db, `${userDocPath}/profile/data`), (docSnapshot) => {
-                if(docSnapshot.exists()){ 
-                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() }); 
-                } else {
-                     const initialData = {
-                        name: user.isAnonymous ? "Invitado" : user.displayName || "Atleta",
+            const userDocRef = doc(db, `${userDocPath}/profile/data`);
+
+            const setupUser = async () => {
+                const docSnap = await getDoc(userDocRef);
+                if (!docSnap.exists()) {
+                    const initialData = {
+                        name: user.isAnonymous ? "Invitado" : user.displayName || user.email || "Atleta",
                         email: user.email,
                         goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 },
                         objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.',
                         workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'],
                         favoriteExercises: [],
                         workoutSchedule: { 
-                            lunes: [{time: '18:00', name: 'Natación'}], martes: [{time: '19:00', name: 'Pesas - Tren Superior'}], 
-                            miercoles: [{time: '19:00', name: 'Pesas - Tren Inferior'}], jueves: [{time: '20:00', name: 'Fútbol'}], 
-                            viernes: [{time: '18:00', name: 'Natación'}], sabado: [], domingo: [] 
+                            lunes: [{time: '18:00', name: 'Pesas - Tren Superior'}],
+                            martes: [{time: '19:00', name: 'Pesas - Tren Inferior'}],
+                            miercoles: [{time: '18:00', name: 'Natación'}],
+                            jueves: [{time: '19:00', name: 'Pesas - Tren Superior'}],
+                            viernes: [{time: '19:00', name: 'Pesas - Tren Inferior'}],
+                            sabado: [{time: '11:00', name: 'Fútbol'}],
+                            domingo: []
                         }
                     };
-                    setDoc(docSnapshot.ref, initialData).then(() => setUserData(initialData));
+                    await setDoc(userDocRef, initialData);
+                }
+            };
+
+            setupUser();
+
+            const unsubUser = onSnapshot(userDocRef, (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
                 }
             });
 
@@ -2017,6 +2028,8 @@ export default function App() {
             });
 
             return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
+        } else {
+            setUserData(null);
         }
     }, [isAuthReady, firebaseServices, user, handleAddFoodToDb]);
 
