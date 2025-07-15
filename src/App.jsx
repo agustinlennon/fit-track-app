@@ -1959,7 +1959,7 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (!user || !firebaseServices) {
+        if (!isAuthReady || !firebaseServices || !user) {
             if(user === null) setUserData({}); // Set to empty object for guest to avoid skeleton
             return;
         };
@@ -2142,6 +2142,18 @@ export default function App() {
     }
 
     const renderView = () => {
+        if (inProgressWorkout && (view === 'ai-workout' || view === 'manual-workout')) {
+             return <AiWorkoutGeneratorView
+                userData={userData}
+                handleGoBack={handleClearInProgressWorkout}
+                handleSaveWorkout={handleSaveWorkout}
+                inProgressWorkout={inProgressWorkout}
+                setInProgressWorkout={handleSetInProgressWorkout}
+                handleToggleFavorite={handleToggleFavorite}
+                handleClearInProgressWorkout={handleClearInProgressWorkout}
+            />;
+        }
+
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
