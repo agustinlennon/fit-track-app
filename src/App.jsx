@@ -1930,11 +1930,20 @@ export default function App() {
         const db = getFirestore(app);
         setFirebaseServices({ auth, db, app });
 
-        const authUnsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                setUser(user);
+        const authUnsubscribe = onAuthStateChanged(auth, async (newUser) => {
+            if (newUser) {
+                setUser(newUser);
             } else {
+                setUserData(null);
+                setDailyLog({});
+                setWeightHistory([]);
+                setFoodDatabase([]);
+                setBodyMeasurements([]);
+                setCompletedWorkouts([]);
+                setCreatineLog([]);
+                setInProgressWorkout(null);
                 setUser(null);
+                
                 if (typeof __firebase_config !== 'undefined') {
                     try {
                         await signInAnonymously(auth);
@@ -1950,18 +1959,10 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (!isAuthReady || !firebaseServices || !user) {
-            // Clear all data if user logs out or is not ready
-            setUserData(null);
-            setDailyLog({});
-            setWeightHistory([]);
-            setFoodDatabase([]);
-            setBodyMeasurements([]);
-            setCompletedWorkouts([]);
-            setCreatineLog([]);
-            setInProgressWorkout(null);
+        if (!user || !firebaseServices) {
+            if(user === null) setUserData({}); // Set to empty object for guest to avoid skeleton
             return;
-        }
+        };
 
         const { db } = firebaseServices;
         const userId = user.uid;
@@ -2021,9 +2022,8 @@ export default function App() {
     }, [isAuthReady, firebaseServices, user]);
 
     const handleRegister = async (email, password, name) => {
-        const { auth, db } = firebaseServices;
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        // The useEffect will handle profile creation
+        const { auth } = firebaseServices;
+        await createUserWithEmailAndPassword(auth, email, password);
     };
 
     const handleLogin = async (email, password) => {
