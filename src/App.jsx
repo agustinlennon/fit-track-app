@@ -1931,47 +1931,47 @@ export default function App() {
         setFirebaseServices({ auth, db, app });
 
         const authUnsubscribe = onAuthStateChanged(auth, async (newUser) => {
-            setUser(newUser);
-            setIsAuthReady(true);
-        });
-
-        (async () => {
-            if (!getAuth(app).currentUser) {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(getAuth(app), __initial_auth_token);
-                } else if (typeof __firebase_config !== 'undefined') {
-                    await signInAnonymously(getAuth(app));
+            if (newUser) {
+                setUser(newUser);
+            } else {
+                setUserData(null);
+                setDailyLog({});
+                setWeightHistory([]);
+                setFoodDatabase([]);
+                setBodyMeasurements([]);
+                setCompletedWorkouts([]);
+                setCreatineLog([]);
+                setInProgressWorkout(null);
+                setUser(null);
+                
+                if (typeof __firebase_config !== 'undefined') {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (error) {
+                        console.error("Anonymous sign-in failed after logout:", error);
+                    }
                 }
             }
-        })();
+            setIsAuthReady(true);
+        });
 
         return () => authUnsubscribe();
     }, []);
 
     useEffect(() => {
-        if (!isAuthReady || !firebaseServices) return;
-
-        if (!user) {
-            setUserData(null);
-            setDailyLog({});
-            setWeightHistory([]);
-            setFoodDatabase([]);
-            setBodyMeasurements([]);
-            setCompletedWorkouts([]);
-            setCreatineLog([]);
-            setInProgressWorkout(null);
+        if (!isAuthReady || !firebaseServices || !user) {
+            if(user === null) setUserData({}); // Set to empty object for guest to avoid skeleton
             return;
-        }
+        };
 
         const { db } = firebaseServices;
         const userId = user.uid;
         const userDocPath = `artifacts/${appId}/users/${userId}`;
         const userDocRef = doc(db, `${userDocPath}/profile/data`);
 
-        const unsubUser = onSnapshot(userDocRef, async (docSnapshot) => {
-            if (docSnapshot.exists()) {
-                setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
-            } else if (!user.isAnonymous) {
+        const setupUser = async () => {
+            const docSnap = await getDoc(userDocRef);
+            if (!docSnap.exists() && !user.isAnonymous) {
                 const initialData = {
                     name: user.displayName || user.email || "Atleta",
                     email: user.email,
@@ -1990,8 +1990,16 @@ export default function App() {
                     }
                 };
                 await setDoc(userDocRef, initialData);
-            } else {
-                 setUserData({ name: "Invitado", isAnonymous: true });
+            }
+        };
+
+        if(!user.isAnonymous) setupUser();
+
+        const unsubUser = onSnapshot(userDocRef, (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
+            } else if (user.isAnonymous) {
+                setUserData({ name: "Invitado", isAnonymous: true });
             }
         });
 
