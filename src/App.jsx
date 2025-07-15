@@ -2148,11 +2148,6 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && view !== 'dashboard') {
-            const workoutView = inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout';
-            if(view !== workoutView) setView(workoutView); // Redirect to the correct workout view
-        }
-
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
