@@ -1931,47 +1931,47 @@ export default function App() {
         setFirebaseServices({ auth, db, app });
 
         const authUnsubscribe = onAuthStateChanged(auth, async (newUser) => {
-            if (newUser) {
-                setUser(newUser);
-            } else {
-                setUserData(null);
-                setDailyLog({});
-                setWeightHistory([]);
-                setFoodDatabase([]);
-                setBodyMeasurements([]);
-                setCompletedWorkouts([]);
-                setCreatineLog([]);
-                setInProgressWorkout(null);
-                setUser(null);
-                
-                if (typeof __firebase_config !== 'undefined') {
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (error) {
-                        console.error("Anonymous sign-in failed after logout:", error);
-                    }
-                }
-            }
+            setUser(newUser);
             setIsAuthReady(true);
         });
+
+        (async () => {
+            if (!getAuth(app).currentUser) {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(getAuth(app), __initial_auth_token);
+                } else if (typeof __firebase_config !== 'undefined') {
+                    await signInAnonymously(getAuth(app));
+                }
+            }
+        })();
 
         return () => authUnsubscribe();
     }, []);
 
     useEffect(() => {
-        if (!isAuthReady || !firebaseServices || !user) {
-            if(user === null) setUserData({}); // Set to empty object for guest to avoid skeleton
+        if (!isAuthReady || !firebaseServices) return;
+
+        if (!user) {
+            setUserData(null);
+            setDailyLog({});
+            setWeightHistory([]);
+            setFoodDatabase([]);
+            setBodyMeasurements([]);
+            setCompletedWorkouts([]);
+            setCreatineLog([]);
+            setInProgressWorkout(null);
             return;
-        };
+        }
 
         const { db } = firebaseServices;
         const userId = user.uid;
         const userDocPath = `artifacts/${appId}/users/${userId}`;
         const userDocRef = doc(db, `${userDocPath}/profile/data`);
 
-        const setupUser = async () => {
-            const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists() && !user.isAnonymous) {
+        const unsubUser = onSnapshot(userDocRef, async (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
+            } else if (!user.isAnonymous) {
                 const initialData = {
                     name: user.displayName || user.email || "Atleta",
                     email: user.email,
@@ -1990,16 +1990,8 @@ export default function App() {
                     }
                 };
                 await setDoc(userDocRef, initialData);
-            }
-        };
-
-        if(!user.isAnonymous) setupUser();
-
-        const unsubUser = onSnapshot(userDocRef, (docSnapshot) => {
-            if (docSnapshot.exists()) {
-                setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
-            } else if (user.isAnonymous) {
-                setUserData({ name: "Invitado", isAnonymous: true });
+            } else {
+                 setUserData({ name: "Invitado", isAnonymous: true });
             }
         });
 
@@ -2142,9 +2134,16 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && view !== 'ai-workout' && view !== 'manual-workout') {
-             // Don't force redirect, let the user navigate freely.
-             // The dashboard will show the "in progress" card.
+        if (inProgressWorkout && (view === 'ai-workout' || view === 'manual-workout')) {
+             return <AiWorkoutGeneratorView
+                userData={userData}
+                handleGoBack={handleClearInProgressWorkout}
+                handleSaveWorkout={handleSaveWorkout}
+                inProgressWorkout={inProgressWorkout}
+                setInProgressWorkout={handleSetInProgressWorkout}
+                handleToggleFavorite={handleToggleFavorite}
+                handleClearInProgressWorkout={handleClearInProgressWorkout}
+            />;
         }
 
         switch (view) {
@@ -2162,14 +2161,7 @@ export default function App() {
     };
 
     const NavItem = ({ icon: Icon, label, viewName }) => (
-        <button onClick={() => {
-            if (inProgressWorkout && (viewName === 'ai-workout' || viewName === 'manual-workout')) {
-                // If a workout is in progress, these buttons should lead to it.
-                setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout');
-            } else {
-                setView(viewName);
-            }
-        }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => setView(viewName)} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             <Icon size={22} /><span className="text-xs sm:text-base font-medium">{label}</span>
         </button>
     );
