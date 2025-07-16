@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff } from 'lucide-react';
 
 
 // --- FUNCIÓN AUXILIAR ---
@@ -553,27 +553,80 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
 };
 
 const AppSettings = ({ user, userData, handleLogin, handleRegister, handleLogout, handleUpdateGoals, handleUpdateObjective }) => {
-    const [authMode, setAuthMode] = useState('login'); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [name, setName] = useState(''); const [error, setError] = useState(''); const [goals, setGoals] = useState(userData?.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 }); const [objectivePrompt, setObjectivePrompt] = useState(userData?.objectivePrompt || ''); const [objectiveSaveStatus, setObjectiveSaveStatus] = useState('idle');
-    useEffect(() => { if (userData?.goals) setGoals(userData.goals); if (userData?.name && user && !user.isAnonymous) setName(userData.name); if (userData?.objectivePrompt) setObjectivePrompt(userData.objectivePrompt); }, [userData, user]);
+    const [authMode, setAuthMode] = useState('login');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [name, setName] = useState('');
+    const [error, setError] = useState('');
+    const [goals, setGoals] = useState(userData?.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
+    const [objectivePrompt, setObjectivePrompt] = useState(userData?.objectivePrompt || '');
+    const [objectiveSaveStatus, setObjectiveSaveStatus] = useState('idle');
+    
+    useEffect(() => {
+        if (userData?.goals) setGoals(userData.goals);
+        if (userData?.name && user && !user.isAnonymous) setName(userData.name);
+        if (userData?.objectivePrompt) setObjectivePrompt(userData.objectivePrompt);
+    }, [userData, user]);
+
     const handleSubmit = async (e) => {
-        e.preventDefault(); setError('');
+        e.preventDefault();
+        setError('');
+        if (authMode === 'register' && password !== confirmPassword) {
+            setError('Las contraseñas no coinciden.');
+            return;
+        }
         try {
-            if (authMode === 'register') { await handleRegister(email, password, name); } else { await handleLogin(email, password); }
+            if (authMode === 'register') {
+                await handleRegister(email, password, name);
+            } else {
+                await handleLogin(email, password);
+            }
         } catch (err) {
-            if (err.code === 'auth/operation-not-allowed') { setError('Error: El inicio de sesión con Email/Contraseña no está habilitado en la configuración de Firebase.'); } else if (err.code === 'auth/email-already-in-use') { setError('El email ya está en uso por otra cuenta.'); } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') { setError('Email o contraseña incorrectos.'); } else { setError(err.message); }
+            if (err.code === 'auth/operation-not-allowed') {
+                setError('Error: El inicio de sesión con Email/Contraseña no está habilitado en la configuración de Firebase.');
+            } else if (err.code === 'auth/email-already-in-use') {
+                setError('El email ya está en uso por otra cuenta.');
+            } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+                setError('Email o contraseña incorrectos.');
+            } else {
+                setError(err.message);
+            }
         }
     };
+    
     const handleGoalsSubmit = (e) => { e.preventDefault(); handleUpdateGoals(goals); };
     const handleObjectiveSubmit = async (e) => { e.preventDefault(); setObjectiveSaveStatus('saving'); try { await handleUpdateObjective(objectivePrompt); setObjectiveSaveStatus('saved'); setTimeout(() => setObjectiveSaveStatus('idle'), 2000); } catch (error) { console.error("Error saving objective prompt:", error); setObjectiveSaveStatus('idle'); } };
+    
     if (!user || user.isAnonymous) {
         return (
             <Card>
-                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4"><button onClick={() => setAuthMode('login')} className={`flex-1 py-2 font-semibold ${authMode === 'login' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Iniciar Sesión</button><button onClick={() => setAuthMode('register')} className={`flex-1 py-2 font-semibold ${authMode === 'register' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Registrarse</button></div>
-                <h2 className="text-2xl font-bold text-center mb-2">{authMode === 'register' ? 'Crear Cuenta' : 'Iniciar Sesión'}</h2><p className="text-center text-gray-600 dark:text-gray-400 mb-4">{authMode === 'register' ? 'Crea una cuenta para guardar tus datos y acceder desde cualquier dispositivo.' : 'Inicia sesión para ver tu progreso guardado.'}</p>
+                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+                    <button onClick={() => setAuthMode('login')} className={`flex-1 py-2 font-semibold ${authMode === 'login' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Iniciar Sesión</button>
+                    <button onClick={() => setAuthMode('register')} className={`flex-1 py-2 font-semibold ${authMode === 'register' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Registrarse</button>
+                </div>
+                <h2 className="text-2xl font-bold text-center mb-2">{authMode === 'register' ? 'Crear Cuenta' : 'Iniciar Sesión'}</h2>
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">{authMode === 'register' ? 'Crea una cuenta para guardar tus datos y acceder desde cualquier dispositivo.' : 'Inicia sesión para ver tu progreso guardado.'}</p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {authMode === 'register' && (<div><label className="block text-sm font-medium">Nombre</label><input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required /></div>)}
                     <div><label className="block text-sm font-medium">Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required /></div>
-                    <div><label className="block text-sm font-medium">Contraseña</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required /></div>
+                    <div className="relative">
+                        <label className="block text-sm font-medium">Contraseña</label>
+                        <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 top-6 pr-3 flex items-center text-gray-500">
+                            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                    </div>
+                    {authMode === 'register' && (
+                        <div className="relative">
+                            <label className="block text-sm font-medium">Confirmar Contraseña</label>
+                            <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-2 mt-1 bg-gray-100 dark:bg-gray-700 border rounded" required />
+                             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 top-6 pr-3 flex items-center text-gray-500">
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
+                    )}
                     {error && <p className="text-red-500 text-sm p-2 bg-red-100 dark:bg-red-900/50 rounded-lg">{error}</p>}
                     <Button type="submit" className="w-full">{authMode === 'register' ? 'Registrarse' : 'Iniciar Sesión'}</Button>
                 </form>
