@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
 import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, BrainCircuit, TestTube2 } from 'lucide-react';
@@ -34,11 +34,11 @@ if (typeof __gemini_api_key !== 'undefined') {
 if (!firebaseConfig) {
   firebaseConfig = {
    apiKey: "AIzaSyBgJN1vtmv7-cMKASPuXGTavw2CFz72ba4",
-  authDomain: "fit-track-app-final.firebaseapp.com",
-  projectId: "fit-track-app-final",
-  storageBucket: "fit-track-app-final.firebasestorage.app",
-  messagingSenderId: "319971791213",
-  appId: "1:319971791213:web:6921580a6072b322694a64"
+   authDomain: "fit-track-app-final.firebaseapp.com",
+   projectId: "fit-track-app-final",
+   storageBucket: "fit-track-app-final.firebasestorage.app",
+   messagingSenderId: "319971791213",
+   appId: "1:319971791213:web:6921580a6072b322694a64"
   };
 }
 
@@ -865,7 +865,7 @@ const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, ha
     );
 };
 
-const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleRegister, handleLogout, handleUpdateGoals, handleUpdateObjective }) => {
+const AppSettings = ({ user, userData, handleLogin, handleRegister, handleLogout, handleUpdateGoals, handleUpdateObjective }) => {
     const [authMode, setAuthMode] = useState('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -873,12 +873,11 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
     const [error, setError] = useState('');
     const [goals, setGoals] = useState(userData?.goals || { calories: 2500, protein: 180, carbs: 250, fat: 70 });
     const [objectivePrompt, setObjectivePrompt] = useState(userData?.objectivePrompt || '');
-    
     const [objectiveSaveStatus, setObjectiveSaveStatus] = useState('idle'); // 'idle', 'saving', 'saved'
 
     useEffect(() => {
         if (userData?.goals) setGoals(userData.goals);
-        if (userData?.name && !user.isAnonymous) setName(userData.name);
+        if (userData?.name && user && !user.isAnonymous) setName(userData.name);
         if (userData?.objectivePrompt) setObjectivePrompt(userData.objectivePrompt);
     }, [userData, user]);
 
@@ -887,6 +886,7 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
         setError('');
         try {
             if (authMode === 'register') {
+                // This function now LINKS the anonymous account, preserving data.
                 await handleRegister(email, password, name);
             } else {
                 await handleLogin(email, password);
@@ -896,10 +896,9 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
                 setError('Error: El inicio de sesión con Email/Contraseña no está habilitado en la configuración de Firebase.');
             } else if (err.code === 'auth/email-already-in-use') {
                 setError('El email ya está en uso por otra cuenta.');
-            } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+            } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
                 setError('Email o contraseña incorrectos.');
-            }
-            else {
+            } else {
                 setError(err.message);
             }
         }
@@ -923,7 +922,8 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
         }
     };
 
-    if (user && user.isAnonymous) {
+    // Main condition: Show the form if the user is NULL (logged out) or ANONYMOUS (guest).
+    if (!user || user.isAnonymous) {
         return (
             <Card>
                 <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
@@ -956,6 +956,7 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
         );
     }
 
+    // If we get here, the user is logged in and not anonymous. Show their profile.
     return (
         <div className="space-y-6">
             <Card>
@@ -1002,6 +1003,7 @@ const AppSettings = ({ user, userData, handleLinkAccount, handleLogin, handleReg
         </div>
     );
 };
+
 
 const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOptions, handleGoBack }) => {
     if (!userData) { return <Card><p>Cargando plan...</p></Card>; }
@@ -1212,15 +1214,15 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
             <div className="flex justify-center items-center gap-4 mb-2">
                  <h4 className="font-semibold text-gray-700 dark:text-gray-300">{title}</h4>
                  {direction === 'down' && (
-                    <div className="flex items-center gap-2">
-                        <input 
-                            type="number" 
-                            value={inputSeconds}
-                            onChange={handleTimeChange}
-                            className="w-20 p-1 text-center bg-white dark:bg-gray-600 border rounded-md"
-                        />
-                        <Button onClick={handleSetTime} variant="secondary" className="px-2 py-1 text-xs">Set</Button>
-                    </div>
+                     <div className="flex items-center gap-2">
+                         <input 
+                             type="number" 
+                             value={inputSeconds}
+                             onChange={handleTimeChange}
+                             className="w-20 p-1 text-center bg-white dark:bg-gray-600 border rounded-md"
+                         />
+                         <Button onClick={handleSetTime} variant="secondary" className="px-2 py-1 text-xs">Set</Button>
+                     </div>
                  )}
             </div>
             <p className="font-mono text-5xl font-bold my-2 text-gray-900 dark:text-white">{formatTime(seconds)}</p>
@@ -1549,15 +1551,15 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
                              <button onClick={() => deleteExercise(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"><Trash2 size={16}/></button>
                             <input type="text" placeholder="Nombre del Ejercicio" value={ex.name} onChange={e => handleExerciseChange(index, 'name', e.target.value)} className={inputClasses} />
                              <div className="grid grid-cols-3 gap-2">
-                                <input type="text" placeholder="Series" value={ex.sets} onChange={e => handleExerciseChange(index, 'sets', e.target.value)} className={inputClasses} />
-                                <input type="text" placeholder="Reps" value={ex.reps} onChange={e => handleExerciseChange(index, 'reps', e.target.value)} className={inputClasses} />
-                                <input type="text" placeholder="Peso" value={ex.weight} onChange={e => handleExerciseChange(index, 'weight', e.target.value)} className={inputClasses} />
+                                 <input type="text" placeholder="Series" value={ex.sets} onChange={e => handleExerciseChange(index, 'sets', e.target.value)} className={inputClasses} />
+                                 <input type="text" placeholder="Reps" value={ex.reps} onChange={e => handleExerciseChange(index, 'reps', e.target.value)} className={inputClasses} />
+                                 <input type="text" placeholder="Peso" value={ex.weight} onChange={e => handleExerciseChange(index, 'weight', e.target.value)} className={inputClasses} />
                              </div>
                         </div>
                     ))}
                 </div>
                  <Button onClick={addExercise} variant="secondary" className="w-full">
-                    <PlusCircle size={18}/> Añadir Ejercicio
+                     <PlusCircle size={18}/> Añadir Ejercicio
                  </Button>
             </div>
             <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1699,7 +1701,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
                                 </ul>
                             </div>
                              <Button onClick={() => setEditingWorkout(workout)} variant="secondary" className="px-2 py-2">
-                                <Edit size={16}/>
+                                 <Edit size={16}/>
                              </Button>
                         </div>
                     </Card>
@@ -1790,8 +1792,8 @@ const ManualWorkoutGenerator = ({ userData, handleGoBack, setInProgressWorkout, 
                     )}
                 </div>
                  <Button onClick={handleCreateRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6">
-                    <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
-                </Button>
+                     <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
+                 </Button>
             </Card>
         </div>
     );
@@ -1877,15 +1879,15 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
                     ))}
                     {isLoading && (
                          <div className="flex items-end gap-2 justify-start">
-                            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white flex-shrink-0"><Bot size={20}/></div>
-                            <div className="max-w-md p-3 rounded-2xl bg-gray-200 dark:bg-gray-700 rounded-bl-none">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                                </div>
-                            </div>
-                        </div>
+                             <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white flex-shrink-0"><Bot size={20}/></div>
+                             <div className="max-w-md p-3 rounded-2xl bg-gray-200 dark:bg-gray-700 rounded-bl-none">
+                                 <div className="flex items-center gap-2">
+                                     <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                     <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                     <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                                 </div>
+                             </div>
+                         </div>
                     )}
                     <div ref={chatEndRef} />
                 </div>
@@ -1925,42 +1927,56 @@ export default function App() {
     const [creatineLog, setCreatineLog] = useState([]);
     const [inProgressWorkout, setInProgressWorkout] = useState(null);
 
+    // **FIXED AUTH LOGIC**
     useEffect(() => {
         const auth = getAuth(app);
         const db = getFirestore(app);
         setFirebaseServices({ auth, db, app });
 
+        // Flag to control initial load vs. explicit logout
+        let isInitialAuthCheck = true;
+
         const authUnsubscribe = onAuthStateChanged(auth, async (newUser) => {
+            setIsAuthReady(false); // Start processing auth change
+
             if (newUser) {
+                // User is authenticated (either anonymous or registered)
                 setUser(newUser);
             } else {
-                setUserData(null);
-                setDailyLog({});
-                setWeightHistory([]);
-                setFoodDatabase([]);
-                setBodyMeasurements([]);
-                setCompletedWorkouts([]);
-                setCreatineLog([]);
-                setInProgressWorkout(null);
-                setUser(null);
-                
-                if (typeof __firebase_config !== 'undefined') {
+                // No user is signed in
+                if (isInitialAuthCheck && typeof __firebase_config !== 'undefined') {
+                    // This is the first app load and no one is logged in. Sign in anonymously for guest mode.
                     try {
                         await signInAnonymously(auth);
+                        // onAuthStateChanged will be triggered again with the new anonymous user.
                     } catch (error) {
-                        console.error("Anonymous sign-in failed after logout:", error);
+                        console.error("Initial anonymous sign-in failed:", error);
+                        setUser(null); // If it fails, ensure user is null.
                     }
+                } else {
+                    // This is an explicit logout. Clear all previous user state.
+                    setUser(null);
+                    setUserData(null);
+                    setDailyLog({});
+                    setWeightHistory([]);
+                    setFoodDatabase([]);
+                    setBodyMeasurements([]);
+                    setCompletedWorkouts([]);
+                    setCreatineLog([]);
+                    setInProgressWorkout(null);
                 }
             }
-            setIsAuthReady(true);
+
+            isInitialAuthCheck = false; // The initial check is done.
+            setIsAuthReady(true); // Auth is ready for the rest of the app to react.
         });
 
         return () => authUnsubscribe();
-    }, []);
+    }, []); // Empty dependency array ensures this runs only once on mount.
 
     useEffect(() => {
         if (!isAuthReady || !firebaseServices || !user) {
-            if(user === null) setUserData({}); // Set to empty object for guest to avoid skeleton
+            if(user === null && userData === null) setUserData({}); // Set to empty object for guest/logged-out state to avoid skeleton
             return;
         };
 
@@ -1999,7 +2015,7 @@ export default function App() {
             if (docSnapshot.exists()) {
                 setUserData({ id: docSnapshot.id, ...docSnapshot.data() });
             } else if (user.isAnonymous) {
-                setUserData({ name: "Invitado", isAnonymous: true });
+                setUserData({ name: "Invitado", isAnonymous: true, goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 }, favoriteExercises: [] });
             }
         });
 
@@ -2021,9 +2037,20 @@ export default function App() {
         
     }, [isAuthReady, firebaseServices, user]);
 
+    // **FIXED REGISTRATION LOGIC**
     const handleRegister = async (email, password, name) => {
-        const { auth } = firebaseServices;
-        await createUserWithEmailAndPassword(auth, email, password);
+        const { auth, db } = firebaseServices;
+        if (!auth.currentUser || !auth.currentUser.isAnonymous) {
+            throw new Error("Error: No hay una sesión de invitado activa para vincular.");
+        }
+        const credential = EmailAuthProvider.credential(email, password);
+        const userCredential = await linkWithCredential(auth.currentUser, credential);
+        const newUser = userCredential.user;
+        const userDocRef = doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`);
+        await updateDoc(userDocRef, {
+            name: name,
+            email: newUser.email,
+        });
     };
 
     const handleLogin = async (email, password) => {
@@ -2031,29 +2058,12 @@ export default function App() {
         await signInWithEmailAndPassword(auth, email, password);
     };
 
-    const handleLinkAccount = async (email, password, name) => {
-        const { auth, db } = firebaseServices;
-        const credential = EmailAuthProvider.credential(email, password);
-        
-        try {
-            const userCredential = await linkWithCredential(auth.currentUser, credential);
-            const newUser = userCredential.user;
-            const userId = newUser.uid;
-            await setDoc(doc(db, `artifacts/${appId}/users/${userId}/profile/data`), {
-                name: name,
-                email: newUser.email,
-            }, { merge: true });
-        } catch (error) {
-            console.error("Error linking account:", error);
-            throw error;
-        }
-    };
-
+    // **FIXED LOGOUT LOGIC**
     const handleLogout = async () => {
         if (!firebaseServices) return;
         const { auth } = firebaseServices;
         await signOut(auth);
-        setView('dashboard');
+        setView('dashboard'); // Go back to dashboard, which will now show the logged-out state.
     };
 
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await updateDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }); };
@@ -2078,7 +2088,7 @@ export default function App() {
     const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, user]);
     const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
     const handleDeleteFood = async (foodId) => { if (!firebaseServices || !user) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/foodDatabase`, foodId)); };
-    const handleAddFood = async (foodData) => { await handleAddFoodToDb(foodData); };
+    const handleAddFood = async (foodData) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/foodDatabase`), foodData); };
     
     const handleLogCreatine = async () => {
         if (!firebaseServices || !user) return;
@@ -2129,7 +2139,7 @@ export default function App() {
                 await updateDoc(userDocRef, { favoriteExercises: arrayRemove(exerciseToRemove) });
             }
         } else {
-            // Aseguramos que el objeto que guardamos no tenga el estado 'completed'
+            // Ensure we don't save the 'completed' state to the favorites list
             const { completed, ...exerciseToSave } = exercise;
             await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseToSave) });
         }
@@ -2142,9 +2152,9 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && view !== 'dashboard') {
-             const targetView = inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout';
-             if (view !== targetView) setView(targetView);
+        if (inProgressWorkout && view !== 'dashboard' && view !== 'ai-workout' && view !== 'manual-workout') {
+            const targetView = inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout';
+            setView(targetView);
         }
 
         switch (view) {
@@ -2152,7 +2162,7 @@ export default function App() {
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
-            case 'settings': return <AppSettings user={user} userData={userData} handleLinkAccount={handleLinkAccount} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
+            case 'settings': return <AppSettings user={user} userData={userData} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} firebaseServices={firebaseServices} user={user} />;
             case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} handleGoBack={handleClearInProgressWorkout} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
             case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} handleToggleFavorite={handleToggleFavorite} />;
@@ -2164,7 +2174,6 @@ export default function App() {
     const NavItem = ({ icon: Icon, label, viewName }) => (
         <button onClick={() => {
             if (inProgressWorkout && (viewName === 'ai-workout' || viewName === 'manual-workout')) {
-                // If a workout is in progress, these buttons should lead to it.
                 setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout');
             } else {
                 setView(viewName);
@@ -2177,45 +2186,45 @@ export default function App() {
     return (
         <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen font-sans">
              <div className="flex flex-col sm:flex-row">
-                <nav className="fixed bottom-0 sm:static sm:h-screen w-full sm:w-64 bg-white dark:bg-gray-800 shadow-lg sm:shadow-none border-t sm:border-r border-gray-200 p-2 sm:p-4 z-40">
-                    <div className="hidden sm:flex sm:flex-col sm:justify-start sm:gap-2 h-full">
-                        <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
-                        <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
-                        <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
-                        <NavItem icon={Dumbbell} label="Rutina Manual" viewName="manual-workout" />
-                        <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
-                        <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
-                        <NavItem icon={History} label="Historial" viewName="history" />
-                        <NavItem icon={User} label="Progreso" viewName="progress" />
-                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
-                        <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
-                        <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
-                        <div className="mt-auto">
-                           <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">
-                               {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
-                           </button>
-                        </div>
-                    </div>
-                    <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
-                        <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
-                        <NavItem icon={Sparkles} label="Rutina IA" viewName="ai-workout" />
-                        <NavItem icon={Dumbbell} label="Manual" viewName="manual-workout" />
-                        <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
-                        <NavItem icon={Calendar} label="Plan" viewName="workout" />
-                        <NavItem icon={History} label="Historial" viewName="history" />
-                        <NavItem icon={User} label="Progreso" viewName="progress" />
-                        <NavItem icon={Utensils} label="Comidas" viewName="food" />
-                        <NavItem icon={PlusCircle} label="Alimentos" viewName="database" />
-                        <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
-                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">
-                           {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}
-                           <span className="text-xs font-medium">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
-                        </button>
-                    </div>
-                </nav>
-                <main className="flex-1 p-4 sm:p-8 pb-24 sm:pb-8">
-                    {renderView()}
-                </main>
+                 <nav className="fixed bottom-0 sm:static sm:h-screen w-full sm:w-64 bg-white dark:bg-gray-800 shadow-lg sm:shadow-none border-t sm:border-r border-gray-200 p-2 sm:p-4 z-40">
+                     <div className="hidden sm:flex sm:flex-col sm:justify-start sm:gap-2 h-full">
+                         <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
+                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
+                         <NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" />
+                         <NavItem icon={Dumbbell} label="Rutina Manual" viewName="manual-workout" />
+                         <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
+                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
+                         <NavItem icon={History} label="Historial" viewName="history" />
+                         <NavItem icon={User} label="Progreso" viewName="progress" />
+                         <NavItem icon={Utensils} label="Comidas" viewName="food" />
+                         <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
+                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
+                         <div className="mt-auto">
+                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">
+                                {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
+                            </button>
+                         </div>
+                     </div>
+                     <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
+                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
+                         <NavItem icon={Sparkles} label="Rutina IA" viewName="ai-workout" />
+                         <NavItem icon={Dumbbell} label="Manual" viewName="manual-workout" />
+                         <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
+                         <NavItem icon={Calendar} label="Plan" viewName="workout" />
+                         <NavItem icon={History} label="Historial" viewName="history" />
+                         <NavItem icon={User} label="Progreso" viewName="progress" />
+                         <NavItem icon={Utensils} label="Comidas" viewName="food" />
+                         <NavItem icon={PlusCircle} label="Alimentos" viewName="database" />
+                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
+                         <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">
+                             {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}
+                             <span className="text-xs font-medium">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
+                         </button>
+                     </div>
+                 </nav>
+                 <main className="flex-1 p-4 sm:p-8 pb-24 sm:pb-8">
+                     {renderView()}
+                 </main>
              </div>
         </div>
     );
