@@ -785,7 +785,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     const getWorkoutIntensity = (exercises) => {
         if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
         const totalSets = exercises.reduce((sum, ex) => sum + (parseInt(ex.sets, 10) || 0), 0);
-        if (totalSets > 20) return { level: 'Intenso', icon: '🔥�🔥' };
+        if (totalSets > 20) return { level: 'Intenso', icon: '🔥🔥🔥' };
         if (totalSets > 12) return { level: 'Moderado', icon: '🔥🔥' };
         return { level: 'Ligero', icon: '🔥' };
     };
@@ -1207,4 +1207,3 @@ export default function App() {
         </div>
     );
 }
-�
