@@ -711,19 +711,22 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
     );
 };
 
-// --- NUEVO COMPONENTE: HistoryTracker con vista de CALENDARIO ---
+// --- HistoryTracker con lógica de categorización inteligente ---
 const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [editingWorkout, setEditingWorkout] = useState(null);
 
+    // Definición de categorías de músculos y palabras clave
+    const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
+    const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos'];
+    const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee'];
+
     const workoutsByDate = useMemo(() => {
-        return completedWorkouts.reduce((acc, workout) => {
+        return (completedWorkouts || []).reduce((acc, workout) => {
             const dateKey = new Date(workout.date).toISOString().slice(0, 10);
-            if (!acc[dateKey]) {
-                acc[dateKey] = [];
-            }
+            if (!acc[dateKey]) { acc[dateKey] = []; }
             acc[dateKey].push(workout);
             return acc;
         }, {});
@@ -736,101 +739,87 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
         const lastDayOfMonth = new Date(year, month + 1, 0);
         const daysInMonth = lastDayOfMonth.getDate();
         const startDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7; // 0=Lunes, 6=Domingo
-
         const days = [];
-        for (let i = 0; i < startDayOfWeek; i++) {
-            days.push(null); // Días de relleno del mes anterior
-        }
-        for (let i = 1; i <= daysInMonth; i++) {
-            days.push(new Date(year, month, i));
-        }
+        for (let i = 0; i < startDayOfWeek; i++) { days.push(null); }
+        for (let i = 1; i <= daysInMonth; i++) { days.push(new Date(year, month, i)); }
         return days;
     }, [currentDate]);
 
-    const getWorkoutFocus = (exercises) => {
+    // Función de categorización mejorada
+    const getWorkoutFocus = useCallback((exercises) => {
         if (!exercises || exercises.length === 0) return 'Descanso';
-        const muscleCounts = exercises.reduce((acc, ex) => {
-            const muscle = ex.muscleGroup || 'General';
-            acc[muscle] = (acc[muscle] || 0) + 1;
-            return acc;
-        }, {});
-        return Object.keys(muscleCounts).reduce((a, b) => muscleCounts[a] > muscleCounts[b] ? a : b);
-    };
+        const counts = { superior: 0, inferior: 0, cardio: 0, otro: 0 };
+        exercises.forEach(ex => {
+            const muscle = (ex.muscleGroup || '').toLowerCase();
+            const name = (ex.name || '').toLowerCase();
+            if (TREN_SUPERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.superior++; } 
+            else if (TREN_INFERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.inferior++; } 
+            else if (CARDIO_KEYWORDS.some(k => muscle.includes(k) || name.includes(k))) { counts.cardio++; } 
+            else { counts.otro++; }
+        });
+        const totalExercises = exercises.length;
+        if (counts.cardio / totalExercises >= 0.5) return 'Cardio';
+        if (counts.superior / totalExercises > 0.7) return 'Tren Superior';
+        if (counts.inferior / totalExercises > 0.7) return 'Tren Inferior';
+        if (counts.superior > 0 && counts.inferior > 0) return 'Full Body';
+        if (counts.superior > 0) return 'Tren Superior';
+        if (counts.inferior > 0) return 'Tren Inferior';
+        return 'General';
+    }, []);
     
     const getWorkoutIntensity = (exercises) => {
         if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
         const totalSets = exercises.reduce((sum, ex) => sum + (parseInt(ex.sets, 10) || 0), 0);
-        if (totalSets > 20) return { level: 'Intenso', icon: '🔥🔥🔥' };
+        if (totalSets > 20) return { level: 'Intenso', icon: '🔥�🔥' };
         if (totalSets > 12) return { level: 'Moderado', icon: '🔥🔥' };
         return { level: 'Ligero', icon: '🔥' };
     };
 
     const getFocusVisuals = (focus) => {
         const normalizedFocus = focus.toLowerCase();
-        if (normalizedFocus.includes('superior')) return { color: 'bg-blue-100 dark:bg-blue-900/50 border-blue-400', icon: <TrendingUp size={16} className="text-blue-500"/> };
-        if (normalizedFocus.includes('inferior') || normalizedFocus.includes('piernas')) return { color: 'bg-green-100 dark:bg-green-900/50 border-green-400', icon: <TrendingUp size={16} className="text-green-500"/> };
-        if (normalizedFocus.includes('cardio')) return { color: 'bg-orange-100 dark:bg-orange-900/50 border-orange-400', icon: <Activity size={16} className="text-orange-500"/> };
-        if (normalizedFocus.includes('full') || normalizedFocus.includes('general')) return { color: 'bg-purple-100 dark:bg-purple-900/50 border-purple-400', icon: <Dumbbell size={16} className="text-purple-500"/> };
-        return { color: 'bg-gray-100 dark:bg-gray-700/50 border-gray-400', icon: <Dumbbell size={16} className="text-gray-500"/> };
+        switch (normalizedFocus) {
+            case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 border-blue-400', icon: <TrendingUp size={16} className="text-blue-500"/>, label: 'Sup.' };
+            case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 border-green-400', icon: <TrendingUp size={16} className="text-green-500"/>, label: 'Inf.' };
+            case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 border-orange-400', icon: <Activity size={16} className="text-orange-500"/>, label: 'Cardio' };
+            case 'full body': return { color: 'bg-purple-100 dark:bg-purple-900/50 border-purple-400', icon: <Dumbbell size={16} className="text-purple-500"/>, label: 'Full' };
+            default: return { color: 'bg-gray-100 dark:bg-gray-700/50 border-gray-400', icon: <Dumbbell size={16} className="text-gray-500"/>, label: 'General' };
+        }
     };
 
     const handleDayClick = (day) => {
         const dateKey = day.toISOString().slice(0, 10);
         const workoutsForDay = workoutsByDate[dateKey];
-        if (workoutsForDay) {
-            setSelectedWorkout({ date: day, workouts: workoutsForDay });
-            setIsDetailModalOpen(true);
-        }
+        if (workoutsForDay) { setSelectedWorkout({ date: day, workouts: workoutsForDay }); setIsDetailModalOpen(true); }
     };
 
     const handleSaveEdit = async (id, data) => {
-        try {
-            await handleUpdateWorkoutLog(id, data);
-            setEditingWorkout(null);
-            setIsDetailModalOpen(false); // Cierra el modal de detalle después de editar
-        } catch (error) {
-            console.error("Error al guardar el entrenamiento:", error);
-        }
+        try { await handleUpdateWorkoutLog(id, data); setEditingWorkout(null); setIsDetailModalOpen(false); } 
+        catch (error) { console.error("Error al guardar el entrenamiento:", error); }
     };
     
-    const openEditModalFromDetail = (workout) => {
-        setIsDetailModalOpen(false);
-        setEditingWorkout(workout);
-    };
-
+    const openEditModalFromDetail = (workout) => { setIsDetailModalOpen(false); setEditingWorkout(workout); };
     const weekDays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Historial de Entrenamientos</h2>
-                <Button onClick={handleGoBack} variant="secondary">Volver</Button>
-            </div>
-
+            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Historial de Entrenamientos</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
             <Card>
                 <div className="flex justify-between items-center mb-4">
                     <Button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} variant="secondary"><ChevronLeft size={20} /></Button>
                     <h3 className="text-xl font-bold capitalize">{currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</h3>
                     <Button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} variant="secondary"><ChevronRight size={20} /></Button>
                 </div>
-
-                <div className="grid grid-cols-7 gap-1 text-center font-semibold text-gray-500 dark:text-gray-400 mb-2">
-                    {weekDays.map(day => <div key={day}>{day}</div>)}
-                </div>
-
+                <div className="grid grid-cols-7 gap-1 text-center font-semibold text-gray-500 dark:text-gray-400 mb-2">{weekDays.map(day => <div key={day}>{day}</div>)}</div>
                 <div className="grid grid-cols-7 gap-1">
                     {calendarDays.map((day, index) => {
                         if (!day) return <div key={`empty-${index}`} className="w-full h-24 sm:h-32 rounded-lg bg-gray-50 dark:bg-gray-800/50"></div>;
-                        
                         const dateKey = day.toISOString().slice(0, 10);
                         const workoutsForDay = workoutsByDate[dateKey];
                         const isToday = new Date().toISOString().slice(0, 10) === dateKey;
-
                         if (workoutsForDay) {
-                            const focus = getWorkoutFocus(workoutsForDay[0].exercises); // Asumimos un entreno por día por ahora
+                            const focus = getWorkoutFocus(workoutsForDay[0].exercises);
                             const intensity = getWorkoutIntensity(workoutsForDay[0].exercises);
                             const visuals = getFocusVisuals(focus);
-                            
                             return (
                                 <div key={dateKey} onClick={() => handleDayClick(day)} className={`w-full h-24 sm:h-32 p-2 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 ${visuals.color}`}>
                                     <div className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div>
@@ -842,54 +831,36 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
                                 </div>
                             );
                         }
-
-                        return (
-                            <div key={dateKey} className="w-full h-24 sm:h-32 p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
-                                <div className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div>
-                            </div>
-                        );
+                        return (<div key={dateKey} className="w-full h-24 sm:h-32 p-2 rounded-lg bg-gray-100 dark:bg-gray-800"><div className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div></div>);
                     })}
                 </div>
             </Card>
-
-            {selectedWorkout && (
-                <WorkoutDetailModal 
-                    isOpen={isDetailModalOpen}
-                    onClose={() => setIsDetailModalOpen(false)}
-                    workoutData={selectedWorkout}
-                    onEdit={openEditModalFromDetail}
-                />
-            )}
-            
-            <EditWorkoutModal
-                workout={editingWorkout}
-                onClose={() => setEditingWorkout(null)}
-                onSave={handleSaveEdit}
-            />
+            {selectedWorkout && (<WorkoutDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} workoutData={selectedWorkout} onEdit={openEditModalFromDetail} getWorkoutFocus={getWorkoutFocus}/>)}
+            <EditWorkoutModal workout={editingWorkout} onClose={() => setEditingWorkout(null)} onSave={handleSaveEdit}/>
         </div>
     );
 };
 
-const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit }) => {
+const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFocus }) => {
     if (!isOpen || !workoutData) return null;
-
     const { date, workouts } = workoutData;
-    const workout = workouts[0]; // Asumiendo un solo entrenamiento por día por ahora
-
+    const workout = workouts[0];
+    const focus = getWorkoutFocus(workout.exercises);
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`🗓️ ${date.toLocaleDateString('es-ES', { dateStyle: 'full' })}`}>
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                    <h4 className="font-bold text-lg text-gray-800 dark:text-white">Detalles del Entrenamiento</h4>
+                    <div>
+                        <h4 className="font-bold text-lg text-gray-800 dark:text-white">Detalles del Entrenamiento</h4>
+                        <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">Foco: {focus}</p>
+                    </div>
                     <Button onClick={() => onEdit(workout)} variant="secondary" className="px-3 py-1 text-sm"><Edit size={16}/> Editar</Button>
                 </div>
                 <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
                     {workout.exercises.map((ex, index) => (
                         <li key={index} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                             <p className="font-bold text-blue-600 dark:text-blue-400">{ex.name}</p>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                                {ex.sets} series de {ex.reps} reps con <span className="font-semibold">{ex.weight}</span>
-                            </p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">{ex.sets} series de {ex.reps} reps con <span className="font-semibold">{ex.weight}</span></p>
                         </li>
                     ))}
                 </ul>
@@ -984,7 +955,6 @@ export default function App() {
             const docSnap = await getDoc(userDocRef);
             if (!docSnap.exists()) {
                 const initialData = { name: user.displayName || user.email || "Atleta", email: user.email, goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 }, objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.', workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'], favoriteExercises: [], workoutSchedule: { lunes: [{time: '18:00', name: 'Pesas - Tren Superior'}], martes: [{time: '19:00', name: 'Pesas - Tren Inferior'}], miercoles: [{time: '18:00', name: 'Natación'}], jueves: [{time: '19:00', name: 'Pesas - Tren Superior'}], viernes: [{time: '19:00', name: 'Pesas - Tren Inferior'}], sabado: [{time: '11:00', name: 'Fútbol'}], domingo: [] } };
-                // Use setDoc to create the document for new non-anonymous users or after linking
                 await setDoc(userDocRef, initialData);
             }
         };
@@ -1066,3 +1036,4 @@ export default function App() {
         </div>
     );
 }
+�
