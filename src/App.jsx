@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse } from 'lucide-react';
 
 
 // --- FUNCIÓN AUXILIAR ---
@@ -150,7 +150,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
 const DashboardSkeleton = () => (
     <div className="space-y-6 animate-pulse">
-        <div className="h-28 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
+        <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
         <div className="h-60 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
@@ -164,7 +164,7 @@ const DashboardSkeleton = () => (
 const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCreatine, creatineLog, inProgressWorkout }) => {
   const [timeFilter, setTimeFilter] = useState('week');
   const [creatineTimeFilter, setCreatineTimeFilter] = useState('week');
-  const [aiRecommendation, setAiRecommendation] = useState({ text: 'Obtén una recomendación de nutrición para tu entrenamiento de hoy.', loading: false });
+  const [aiRecommendation, setAiRecommendation] = useState({ text: '', loading: false });
   const [activityChartView, setActivityChartView] = useState('volume');
   const [creatineStatus, setCreatineStatus] = useState('idle');
 
@@ -180,14 +180,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   };
 
   const todayDate = new Date();
-  const yesterdayDate = new Date();
-  yesterdayDate.setDate(todayDate.getDate() - 1);
-  const tomorrowDate = new Date();
-  tomorrowDate.setDate(todayDate.getDate() + 1);
-
   const todaysPlan = getDayPlan(todayDate);
-  const yesterdaysPlan = getDayPlan(yesterdayDate);
-  const tomorrowsPlan = getDayPlan(tomorrowDate);
 
   const getAiRecommendation = async () => {
     if (!userData) return;
@@ -195,12 +188,16 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
     try {
         const weather = "Día fresco de invierno, 12°C.";
         const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
-        const prompt = `Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}. Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}: - **Mi objetivo principal:** ${objectivePrompt}. - **Ayer (${yesterdaysPlan.name}) entrené:** ${yesterdaysPlan.text}. - **Hoy (${todaysPlan.name}) mi plan es:** ${todaysPlan.text}. - **Mañana (${tomorrowsPlan.name}) entrenaré:** ${tomorrowsPlan.text}. - **El clima de hoy:** ${weather}. Basado en todo esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos: - Una sugerencia rápida para la comida pre y post entrenamiento. - Un consejo clave sobre hidratación o suplementación relevante para hoy. - Finaliza con una frase motivadora.`;
+        const prompt = `Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}. Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}: - **Mi objetivo principal:** ${objectivePrompt}. - **Mi plan para hoy (${todaysPlan.name}) es:** ${todaysPlan.text}. - **El clima de hoy:** ${weather}. Basado en esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos: - Una sugerencia rápida para la comida pre y post entrenamiento. - Un consejo clave sobre hidratación o suplementación relevante para hoy. - Finaliza con una frase motivadora.`;
         const recommendationText = await callGeminiAPI(prompt);
         setAiRecommendation({ text: recommendationText, loading: false });
     } catch (error) {
         console.error("Error fetching AI recommendation:", error);
-        setAiRecommendation({ text: 'No se pudo obtener la recomendación. Intenta más tarde.', loading: false });
+        let errorMessage = 'No se pudo obtener la recomendación. Intenta más tarde.';
+        if (error.message.includes("503") || error.message.includes("Overloaded")) {
+            errorMessage = 'El asistente de IA está muy solicitado en este momento. Por favor, inténtalo de nuevo en unos minutos.';
+        }
+        setAiRecommendation({ text: errorMessage, loading: false });
     }
   };
 
@@ -315,36 +312,51 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
             <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
             <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
        </div>
-       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <Card className="md:col-span-3 flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Entrenamiento de Hoy</h3>
-            {Array.isArray(todaysPlan.text.split(' y ')) && todaysPlan.text !== 'Descanso' ? (
-                todaysPlan.text.split(' y ').map((p, i) => {
-                    const parts = p.split(' a las ');
-                    return (
-                        <div key={i} className="flex justify-between items-baseline mt-4">
-                            <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{parts[0]}</p>
-                            <p className="text-lg text-gray-500 dark:text-gray-400">{parts[1]}</p>
-                        </div>
-                    )
-                })
-            ) : ( <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 my-4">Descanso</p> )}
-          </div>
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-               <Button onClick={() => setView('ai-workout')} disabled={!!inProgressWorkout} className="w-full"><Sparkles size={18}/> Rutina con IA</Button>
-               <Button onClick={() => setView('manual-workout')} disabled={!!inProgressWorkout} className="w-full" variant="secondary"><Dumbbell size={18}/> Rutina Manual</Button>
-           </div>
-        </Card>
-        <Card className="md:col-span-2 flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold text-xl text-gray-800 dark:text-white">Recomendación del Día</h3>
-            <p className={`mt-2 text-gray-600 dark:text-gray-300 whitespace-pre-wrap ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>{aiRecommendation.text}</p>
-          </div>
-          <Button onClick={getAiRecommendation} disabled={aiRecommendation.loading} className="w-full mt-4"><Sparkles size={18}/> {aiRecommendation.loading ? 'Analizando...' : 'Generar Informe'}</Button>
-        </Card>
-      </div>
-      {inProgressWorkout && (<Card className="bg-blue-900/50 border-2 border-blue-500 animate-pulse-slow"><h3 className="font-bold text-xl text-white">Rutina en Progreso</h3><p className="text-blue-200 mt-2">Tienes una rutina {inProgressWorkout.type === 'ai' ? 'generada por IA' : 'manual'} pendiente de finalizar.</p><Button onClick={() => setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout')} className="w-full mt-4">Continuar Rutina</Button></Card>)}
+
+       {/* --- Tarjeta Unificada --- */}
+       <Card className="flex flex-col gap-4">
+            <div>
+                <h3 className="font-bold text-xl text-gray-800 dark:text-white">Foco del Día</h3>
+                {todaysPlan.text !== 'Descanso' ? (
+                    todaysPlan.text.split(' y ').map((p, i) => {
+                        const parts = p.split(' a las ');
+                        return (
+                            <div key={i} className="flex justify-between items-baseline mt-2">
+                                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{parts[0]}</p>
+                                <p className="text-lg text-gray-500 dark:text-gray-400">{parts[1]}</p>
+                            </div>
+                        )
+                    })
+                ) : ( <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 my-2">Descanso</p> )}
+            </div>
+            {inProgressWorkout ? (
+                <Button onClick={() => setView('active-workout')} className="w-full animate-pulse-slow" variant="success">
+                    <Zap size={18}/> Continuar Rutina en Progreso
+                </Button>
+            ) : (
+                <Button onClick={() => setView('workout-starter')} className="w-full">
+                    <Dumbbell size={18}/> Empezar a Entrenar
+                </Button>
+            )}
+            
+            {(aiRecommendation.text || aiRecommendation.loading) && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <p className={`text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap ${aiRecommendation.loading ? 'animate-pulse' : ''}`}>
+                        {aiRecommendation.text}
+                    </p>
+                </div>
+            )}
+
+            {!aiRecommendation.text && !aiRecommendation.loading && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <Button onClick={getAiRecommendation} disabled={aiRecommendation.loading} className="w-full" variant="secondary">
+                        <Sparkles size={18}/> 
+                        {aiRecommendation.loading ? 'Analizando...' : 'Obtener recomendación de la IA'}
+                    </Button>
+                </div>
+            )}
+       </Card>
+
       <Card>
         <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-xl text-gray-800 dark:text-white">Resumen de Actividad</h3>
@@ -625,58 +637,65 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     );
 };
 
-const AiWorkoutGeneratorView = ({ userData, handleGoBack, handleSaveWorkout, inProgressWorkout, setInProgressWorkout, handleToggleFavorite, handleClearInProgressWorkout }) => {
-    const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState(''); const [fatigueLevel, setFatigueLevel] = useState('normal'); const [userNotes, setUserNotes] = useState(''); const [restTime, setRestTime] = useState(90); const [recalculatingIndex, setRecalculatingIndex] = useState(null);
+const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgressWorkout, setInProgressWorkout, handleToggleFavorite, handleClearInProgressWorkout }) => {
+    const [restTime, setRestTime] = useState(90);
+    const [recalculatingIndex, setRecalculatingIndex] = useState(null);
+
     const routine = inProgressWorkout ? inProgressWorkout.exercises : [];
-    const getWorkoutSuggestion = async () => {
-        setIsLoading(true); setError('');
-        const historySummary = Array.isArray(userData.completedWorkouts) ? userData.completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
-        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase(); const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : []; const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso'; const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.map(ex => ex.name).join(', ')}. Intenta incluirlos si son apropiados.` : '';
-        const objectivePromptText = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
-        const prompt = `Hola, soy ${userData.name}. ${objectivePromptText} Mi plan para hoy es: ${todayWorkoutText}. Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}". Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros. Mi nivel de energía hoy es: ${fatigueLevel}. Mi historial reciente es: ${historySummary || 'ninguno'}. ${favoriteExercisesText} Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy. IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment, caloriesBurned y muscleGroup (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core").`;
-        const generationConfig = { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { routine: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, sets: { type: "STRING" }, reps: { type: "STRING" }, weight: { type: "STRING" }, videoSearchQuery: { type: "STRING" }, estimatedDuration: { type: "STRING" }, difficultyLevel: { type: "STRING" }, equipment: { type: "STRING" }, caloriesBurned: { type: "STRING" }, muscleGroup: { type: "STRING" } }, required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel", "equipment", "caloriesBurned", "muscleGroup"] } } } } };
-        try {
-            const resultText = await callGeminiAPI(prompt, generationConfig); const parsedJson = parseJsonFromMarkdown(resultText); const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
-            if (!parsedJson.routine || parsedJson.routine.length === 0) { setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo."); } else { setInProgressWorkout({ type: 'ai', exercises: editableRoutine }); }
-        } catch (err) { setError(`Ocurrió un error al contactar al asistente de IA. Error: ${err.message}`); } finally { setIsLoading(false); }
-    };
+
     const handleRecalculateCalories = async (exerciseIndex) => {
         setRecalculatingIndex(exerciseIndex); const exercise = routine[exerciseIndex];
         const prompt = `Por favor, recalcula las calorías quemadas para el siguiente ejercicio basado en los nuevos datos: - Ejercicio: ${exercise.name} - Series: ${exercise.sets} - Repeticiones: ${exercise.reps} - Peso: ${exercise.weight} Responde únicamente con el nuevo valor de calorías quemadas (ej: "60-80 kcal").`;
         try { const newCalories = await callGeminiAPI(prompt); const updatedRoutine = [...routine]; updatedRoutine[exerciseIndex].caloriesBurned = newCalories.trim(); setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); } catch (error) { console.error("Error recalculating calories:", error); } finally { setRecalculatingIndex(null); }
     };
+
     const handleExerciseUpdate = (index, field, value) => { const updatedRoutine = [...routine]; updatedRoutine[index][field] = value; setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
     const handleToggleComplete = (index) => { const updatedRoutine = [...routine]; updatedRoutine[index].completed = !updatedRoutine[index].completed; setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
     const handleDeleteExercise = (indexToDelete) => { const updatedRoutine = routine.filter((_, index) => index !== indexToDelete); setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
     const handleFinishAndSave = () => { handleSaveWorkout(routine); handleClearInProgressWorkout(); };
-    const totalCaloriesBurned = useMemo(() => { return Array.isArray(routine) ? routine.reduce((total, exercise) => { const calString = exercise.caloriesBurned || "0"; const numbers = calString.match(/\d+/g); if (!numbers) return total; if (numbers.length > 1) { return total + (parseInt(numbers[0], 10) + parseInt(numbers[1], 10)) / 2; } else if (numbers.length === 1) { return total + parseInt(numbers[0], 10); } return total; }, 0) : 0; }, [routine]);
+    
+    const totalCaloriesBurned = useMemo(() => {
+        return Array.isArray(routine) ? routine.reduce((total, exercise) => {
+            const calString = exercise.caloriesBurned || "0";
+            const numbers = calString.match(/\d+/g);
+            if (!numbers) return total;
+            if (numbers.length > 1) { return total + (parseInt(numbers[0], 10) + parseInt(numbers[1], 10)) / 2; }
+            else if (numbers.length === 1) { return total + parseInt(numbers[0], 10); }
+            return total;
+        }, 0) : 0;
+    }, [routine]);
+
     const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
+
+    if (!inProgressWorkout || !Array.isArray(routine) || routine.length === 0) {
+        return (
+            <div>
+                <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Rutina Activa</h2><Button onClick={() => handleGoBack('dashboard')} variant="secondary">Volver</Button></div>
+                <Card><p className="text-center text-gray-500">No hay ninguna rutina en progreso. ¡Crea una nueva!</p></Card>
+            </div>
+        );
+    }
+
     return (
         <div>
-            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Rutina Activa</h2><Button onClick={handleGoBack} variant="secondary">Abandonar</Button></div>
-            {!inProgressWorkout && (<Card><div className="space-y-4"><h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3><div><label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label><select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded"><option value="baja">Baja energía</option><option value="normal">Normal</option><option value="alta">Mucha energía</option></select></div><div><label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label><textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded" rows="2"></textarea></div><Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full"><Sparkles size={18}/>{isLoading ? 'Generando tu rutina...' : 'Generar Rutina de Hoy'}</Button></div></Card>)}
-            {isLoading && <div className="mt-6 text-center p-4"><p className="animate-pulse text-lg">El entrenador IA está preparando tu sesión...</p></div>}
-            {error && <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg">{error}</div>}
-            {inProgressWorkout && Array.isArray(routine) && routine.length > 0 && (
-                <div className="mt-6 space-y-4">
-                    <h3 className="text-xl font-bold text-center">Tu Rutina de Hoy</h3>
-                    <Card><div className="flex justify-between items-center"><Timer title="Cronómetro General" direction="up" /><div className="text-center px-4"><p className="font-semibold text-gray-700 dark:text-gray-300">Calorías Totales (Est.)</p><p className="font-mono text-4xl font-bold text-orange-500">{Math.round(totalCaloriesBurned)}</p><p className="text-xs text-gray-500 dark:text-gray-400">kcal</p></div></div></Card>
-                    {routine.map((exercise, index) => { const isFavorite = userData.favoriteExercises?.some(favEx => favEx.name === exercise.name); return (
-                        <React.Fragment key={index}>
-                            <Card className={`border-2 ${exercise.completed ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-transparent'}`}>
-                                <button onClick={() => handleToggleFavorite(exercise)} className="absolute top-2 left-2 text-gray-400 hover:text-yellow-400 transition-colors z-10" aria-label="Marcar como favorito"><Star size={20} className={isFavorite ? "text-yellow-400 fill-current" : ""} /></button>
-                                <button onClick={() => handleDeleteExercise(index)} className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10" aria-label="Eliminar ejercicio"><X size={18} /></button>
-                                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-6">
-                                    <div className="flex-1"><h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label className="text-xs font-medium">Series</label><input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Reps</label><input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Equipo</label><select value={exercise.equipment} onChange={(e) => handleExerciseUpdate(index, 'equipment', e.target.value)} className={inputClasses}><option>Mancuerna</option><option>Barra</option><option>Peso Corporal</option><option>Máquina</option></select></div></div><div className="mt-4 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300"><span className={`flex items-center gap-1 ${recalculatingIndex === index ? 'animate-pulse' : ''}`}><Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}</span><Button onClick={() => handleRecalculateCalories(index)} variant="secondary" className="px-2 py-1 text-xs" disabled={recalculatingIndex === index}><RotateCcw size={14}/>{recalculatingIndex === index ? '...' : 'Actualizar'}</Button></div></div>
-                                    <div className="w-full sm:w-auto flex flex-col gap-2 mt-2 sm:mt-0"><Button onClick={() => handleToggleComplete(index)} variant={exercise.completed ? 'secondary' : 'success'} className="w-full"><Check size={18} /> {exercise.completed ? 'Deshacer' : 'Terminado'}</Button><Button asLink={true} href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoSearchQuery)}`} variant="youtube" className="w-full"><Youtube size={18} /> Ver Video</Button></div>
-                                </div>
-                            </Card>
-                            {index < routine.length - 1 && (<div className="max-w-md mx-auto w-full"><Card><Timer title="Descanso" initialSeconds={restTime} onTimeSet={setRestTime} direction="down" /></Card></div>)}
-                        </React.Fragment>
-                    )})}
-                    <Button onClick={handleFinishAndSave} variant="primary" className="w-full mt-4"><CheckCircle size={20} /> Finalizar y Guardar Rutina</Button>
-                </div>
-            )}
+            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Rutina Activa</h2><Button onClick={handleClearInProgressWorkout} variant="danger">Abandonar</Button></div>
+            <div className="mt-6 space-y-4">
+                <Card><div className="flex justify-between items-center"><Timer title="Cronómetro General" direction="up" /><div className="text-center px-4"><p className="font-semibold text-gray-700 dark:text-gray-300">Calorías Totales (Est.)</p><p className="font-mono text-4xl font-bold text-orange-500">{Math.round(totalCaloriesBurned)}</p><p className="text-xs text-gray-500 dark:text-gray-400">kcal</p></div></div></Card>
+                {routine.map((exercise, index) => { const isFavorite = userData.favoriteExercises?.some(favEx => favEx.name === exercise.name); return (
+                    <React.Fragment key={index}>
+                        <Card className={`border-2 ${exercise.completed ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-transparent'}`}>
+                            <button onClick={() => handleToggleFavorite(exercise)} className="absolute top-2 left-2 text-gray-400 hover:text-yellow-400 transition-colors z-10" aria-label="Marcar como favorito"><Star size={20} className={isFavorite ? "text-yellow-400 fill-current" : ""} /></button>
+                            <button onClick={() => handleDeleteExercise(index)} className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10" aria-label="Eliminar ejercicio"><X size={18} /></button>
+                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-6">
+                                <div className="flex-1"><h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label className="text-xs font-medium">Series</label><input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Reps</label><input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Equipo</label><select value={exercise.equipment} onChange={(e) => handleExerciseUpdate(index, 'equipment', e.target.value)} className={inputClasses}><option>Mancuerna</option><option>Barra</option><option>Peso Corporal</option><option>Máquina</option></select></div></div><div className="mt-4 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300"><span className={`flex items-center gap-1 ${recalculatingIndex === index ? 'animate-pulse' : ''}`}><Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}</span><Button onClick={() => handleRecalculateCalories(index)} variant="secondary" className="px-2 py-1 text-xs" disabled={recalculatingIndex === index}><RotateCcw size={14}/>{recalculatingIndex === index ? '...' : 'Actualizar'}</Button></div></div>
+                                <div className="w-full sm:w-auto flex flex-col gap-2 mt-2 sm:mt-0"><Button onClick={() => handleToggleComplete(index)} variant={exercise.completed ? 'secondary' : 'success'} className="w-full"><Check size={18} /> {exercise.completed ? 'Deshacer' : 'Terminado'}</Button><Button asLink={true} href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoSearchQuery)}`} variant="youtube" className="w-full"><Youtube size={18} /> Ver Video</Button></div>
+                            </div>
+                        </Card>
+                        {index < routine.length - 1 && (<div className="max-w-md mx-auto w-full"><Card><Timer title="Descanso" initialSeconds={restTime} onTimeSet={setRestTime} direction="down" /></Card></div>)}
+                    </React.Fragment>
+                )})}
+                <Button onClick={handleFinishAndSave} variant="primary" className="w-full mt-4"><CheckCircle size={20} /> Finalizar y Guardar Rutina</Button>
+            </div>
         </div>
     );
 };
@@ -711,14 +730,12 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
     );
 };
 
-// --- HistoryTracker con lógica de categorización inteligente ---
 const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [editingWorkout, setEditingWorkout] = useState(null);
 
-    // Definición de categorías de músculos y palabras clave
     const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
     const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos'];
     const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee'];
@@ -738,14 +755,13 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
         const firstDayOfMonth = new Date(year, month, 1);
         const lastDayOfMonth = new Date(year, month + 1, 0);
         const daysInMonth = lastDayOfMonth.getDate();
-        const startDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7; // 0=Lunes, 6=Domingo
+        const startDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7;
         const days = [];
         for (let i = 0; i < startDayOfWeek; i++) { days.push(null); }
         for (let i = 1; i <= daysInMonth; i++) { days.push(new Date(year, month, i)); }
         return days;
     }, [currentDate]);
 
-    // Función de categorización mejorada
     const getWorkoutFocus = useCallback((exercises) => {
         if (!exercises || exercises.length === 0) return 'Descanso';
         const counts = { superior: 0, inferior: 0, cardio: 0, otro: 0 };
@@ -765,12 +781,12 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
         if (counts.superior > 0) return 'Tren Superior';
         if (counts.inferior > 0) return 'Tren Inferior';
         return 'General';
-    }, []);
+    }, [TREN_SUPERIOR_MUSCLES, TREN_INFERIOR_MUSCLES, CARDIO_KEYWORDS]);
     
     const getWorkoutIntensity = (exercises) => {
         if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
         const totalSets = exercises.reduce((sum, ex) => sum + (parseInt(ex.sets, 10) || 0), 0);
-        if (totalSets > 20) return { level: 'Intenso', icon: '🔥�🔥' };
+        if (totalSets > 20) return { level: 'Intenso', icon: '🔥🔥🔥' };
         if (totalSets > 12) return { level: 'Moderado', icon: '🔥🔥' };
         return { level: 'Ligero', icon: '🔥' };
     };
@@ -778,11 +794,11 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     const getFocusVisuals = (focus) => {
         const normalizedFocus = focus.toLowerCase();
         switch (normalizedFocus) {
-            case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 border-blue-400', icon: <TrendingUp size={16} className="text-blue-500"/>, label: 'Sup.' };
-            case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 border-green-400', icon: <TrendingUp size={16} className="text-green-500"/>, label: 'Inf.' };
-            case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 border-orange-400', icon: <Activity size={16} className="text-orange-500"/>, label: 'Cardio' };
-            case 'full body': return { color: 'bg-purple-100 dark:bg-purple-900/50 border-purple-400', icon: <Dumbbell size={16} className="text-purple-500"/>, label: 'Full' };
-            default: return { color: 'bg-gray-100 dark:bg-gray-700/50 border-gray-400', icon: <Dumbbell size={16} className="text-gray-500"/>, label: 'General' };
+            case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 border-blue-400', icon: <TrendingUp size={16} className="text-blue-500"/> };
+            case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 border-green-400', icon: <TrendingUp size={16} className="text-green-500"/> };
+            case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 border-orange-400', icon: <Activity size={16} className="text-orange-500"/> };
+            case 'full body': return { color: 'bg-purple-100 dark:bg-purple-900/50 border-purple-400', icon: <Dumbbell size={16} className="text-purple-500"/> };
+            default: return { color: 'bg-gray-100 dark:bg-gray-700/50 border-gray-400', icon: <Dumbbell size={16} className="text-gray-500"/> };
         }
     };
 
@@ -869,14 +885,13 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFo
     );
 };
 
-
 const ManualWorkoutGenerator = ({ userData, handleGoBack, setInProgressWorkout, setView, handleToggleFavorite }) => {
     const [selectedMuscle, setSelectedMuscle] = useState('Todos'); const [selectedExercises, setSelectedExercises] = useState({});
     const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
     const muscleGroups = useMemo(() => { const groups = new Set(favoriteExercises.map(ex => ex.muscleGroup || 'Sin Grupo')); return ['Todos', ...Array.from(groups)]; }, [favoriteExercises]);
     const filteredExercises = useMemo(() => { if (selectedMuscle === 'Todos') return favoriteExercises; return favoriteExercises.filter(ex => (ex.muscleGroup || 'Sin Grupo') === selectedMuscle); }, [favoriteExercises, selectedMuscle]);
     const handleToggleExerciseSelection = (exerciseName) => { setSelectedExercises(prev => ({ ...prev, [exerciseName]: !prev[exerciseName] })); };
-    const handleCreateRoutine = () => { const newRoutineExercises = favoriteExercises.filter(ex => selectedExercises[ex.name]).map(ex => ({ ...ex, completed: false })); setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises }); setView('ai-workout'); };
+    const handleCreateRoutine = () => { const newRoutineExercises = favoriteExercises.filter(ex => selectedExercises[ex.name]).map(ex => ({ ...ex, completed: false })); setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises }); setView('active-workout'); };
     return (
         <div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina Manual</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
@@ -908,7 +923,17 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
             const contextSummary = { objective: userData.objectivePrompt, goals: userData.goals, recentWorkouts: completedWorkouts.slice(0, 3).map(w => ({ date: w.date, exercises: w.exercises.map(e => e.name) })), recentWeight: weightHistory.slice(-3) };
             const prompt = `Actúa como un entrenador personal y nutricionista experto, amigable y motivador. Mi nombre es ${userData.name}. Aquí tienes un resumen de mi contexto actual: ${JSON.stringify(contextSummary)} El usuario ha enviado el siguiente mensaje en nuestro chat: "${userMessage.text}" Basándote en el contexto proporcionado y el mensaje del usuario, proporciona una respuesta útil, concisa y conversacional.`;
             const aiResponseText = await callGeminiAPI(prompt); const aiMessage = { from: 'ai', text: aiResponseText }; setMessages(prev => [...prev, aiMessage]);
-        } catch (error) { console.error("Error fetching AI chat response:", error); const errorMessage = { from: 'ai', text: 'Lo siento, he tenido un problema para conectar. Por favor, inténtalo de nuevo más tarde.' }; setMessages(prev => [...prev, errorMessage]); } finally { setIsLoading(false); }
+        } catch (error) {
+            console.error("Error fetching AI chat response:", error);
+            let errorMessageText = 'Lo siento, he tenido un problema para conectar. Por favor, inténtalo de nuevo más tarde.';
+            if (error.message.includes("503") || error.message.includes("Overloaded")) {
+                errorMessageText = 'El asistente de IA está muy solicitado en este momento. Por favor, inténtalo de nuevo en unos minutos.';
+            }
+            const errorMessage = { from: 'ai', text: errorMessageText };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
     };
     return (
         <div className="flex flex-col h-full max-h-[85vh]">
@@ -921,6 +946,103 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
                 </div>
                 <form onSubmit={handleSend} className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center gap-3"><input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Escribe tu consulta aquí..." className="flex-1 w-full p-3 bg-gray-100 dark:bg-gray-600 border-transparent rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" disabled={isLoading}/><Button type="submit" disabled={isLoading || !input.trim()}><Send size={18} /></Button></form>
             </Card>
+        </div>
+    );
+};
+
+// --- Nuevo componente para el flujo unificado de creación de rutinas ---
+const WorkoutStarter = ({ setView }) => {
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina</h2>
+                <Button onClick={() => setView('dashboard')} variant="secondary">Volver</Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card onClick={() => setView('ai-workout-setup')} className="cursor-pointer hover:border-blue-500 border-2 border-transparent transition-all duration-200 hover:shadow-xl hover:-translate-y-1">
+                    <div className="flex flex-col items-center text-center">
+                        <Sparkles className="w-16 h-16 text-blue-500 mb-4"/>
+                        <h3 className="text-xl font-bold mb-2">Generar con IA</h3>
+                        <p className="text-gray-500 dark:text-gray-400">Deja que tu coach personal cree una rutina optimizada para ti basada en tus objetivos y energía.</p>
+                    </div>
+                </Card>
+                <Card onClick={() => setView('manual-workout-selection')} className="cursor-pointer hover:border-green-500 border-2 border-transparent transition-all duration-200 hover:shadow-xl hover:-translate-y-1">
+                    <div className="flex flex-col items-center text-center">
+                        <HeartPulse className="w-16 h-16 text-green-500 mb-4"/>
+                        <h3 className="text-xl font-bold mb-2">Crear desde Favoritos</h3>
+                        <p className="text-gray-500 dark:text-gray-400">Elige tus ejercicios preferidos y arma la rutina perfecta para hoy.</p>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
+// --- Nuevo componente para la configuración de la rutina con IA ---
+const AiWorkoutSetup = ({ userData, handleGoBack, setInProgressWorkout, setView }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [fatigueLevel, setFatigueLevel] = useState('normal');
+    const [userNotes, setUserNotes] = useState('');
+
+    const getWorkoutSuggestion = async () => {
+        setIsLoading(true);
+        setError('');
+        const historySummary = Array.isArray(userData.completedWorkouts) ? userData.completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
+        const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+        const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
+        const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
+        const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.map(ex => ex.name).join(', ')}. Intenta incluirlos si son apropiados.` : '';
+        const objectivePromptText = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
+        const prompt = `Hola, soy ${userData.name}. ${objectivePromptText} Mi plan para hoy es: ${todayWorkoutText}. Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}". Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros. Mi nivel de energía hoy es: ${fatigueLevel}. Mi historial reciente es: ${historySummary || 'ninguno'}. ${favoriteExercisesText} Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy. IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment, caloriesBurned y muscleGroup (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core").`;
+        const generationConfig = { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { routine: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, sets: { type: "STRING" }, reps: { type: "STRING" }, weight: { type: "STRING" }, videoSearchQuery: { type: "STRING" }, estimatedDuration: { type: "STRING" }, difficultyLevel: { type: "STRING" }, equipment: { type: "STRING" }, caloriesBurned: { type: "STRING" }, muscleGroup: { type: "STRING" } }, required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel", "equipment", "caloriesBurned", "muscleGroup"] } } } } };
+        try {
+            const resultText = await callGeminiAPI(prompt, generationConfig);
+            const parsedJson = parseJsonFromMarkdown(resultText);
+            const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
+            if (!parsedJson.routine || parsedJson.routine.length === 0) {
+                setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
+            } else {
+                setInProgressWorkout({ type: 'ai', exercises: editableRoutine });
+                setView('active-workout');
+            }
+        } catch (err) {
+            let errorMessage = `Ocurrió un error al contactar al asistente de IA. Error: ${err.message}`;
+            if (err.message.includes("503") || err.message.includes("Overloaded")) {
+                errorMessage = 'El asistente de IA está muy solicitado en este momento. Por favor, inténtalo de nuevo en unos minutos.';
+            }
+            setError(errorMessage);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Rutina con IA</h2><Button onClick={() => handleGoBack('workout-starter')} variant="secondary">Volver</Button></div>
+            <Card>
+                <div className="space-y-4">
+                    <h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label>
+                        <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded">
+                            <option value="baja">Baja energía</option>
+                            <option value="normal">Normal</option>
+                            <option value="alta">Mucha energía</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
+                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded" rows="2"></textarea>
+                    </div>
+                    <Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full">
+                        <Sparkles size={18}/>
+                        {isLoading ? 'Generando tu rutina...' : 'Generar Rutina'}
+                    </Button>
+                </div>
+            </Card>
+            {isLoading && <div className="mt-6 text-center p-4"><p className="animate-pulse text-lg">El entrenador IA está preparando tu sesión...</p></div>}
+            {error && <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg">{error}</div>}
         </div>
     );
 };
@@ -996,7 +1118,8 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && view !== 'dashboard' && view !== 'ai-workout' && view !== 'manual-workout') { const targetView = inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout'; setView(targetView); }
+        // **FIXED** This logic was moved to the NavItem onClick to prevent navigation bugs.
+        // The view is now changed only by explicit user actions.
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
@@ -1004,15 +1127,17 @@ export default function App() {
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} />;
-            case 'ai-workout': return <AiWorkoutGeneratorView userData={userData} handleGoBack={handleClearInProgressWorkout} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
-            case 'manual-workout': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('dashboard')} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} handleToggleFavorite={handleToggleFavorite} />;
+            case 'workout-starter': return <WorkoutStarter setView={setView} />;
+            case 'ai-workout-setup': return <AiWorkoutSetup userData={userData} handleGoBack={setView} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} />;
+            case 'manual-workout-selection': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('workout-starter')} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} handleToggleFavorite={handleToggleFavorite} />;
+            case 'active-workout': return <ActiveWorkoutView userData={userData} handleGoBack={setView} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} inProgressWorkout={inProgressWorkout} />;
         }
     };
 
     const NavItem = ({ icon: Icon, label, viewName }) => (
-        <button onClick={() => { if (inProgressWorkout && (viewName === 'ai-workout' || viewName === 'manual-workout')) { setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout'); } else { setView(viewName); } }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => { if (inProgressWorkout && viewName === 'workout-starter') { setView('active-workout'); } else { setView(viewName); } }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             <Icon size={22} /><span className="text-xs sm:text-base font-medium">{label}</span>
         </button>
     );
@@ -1023,11 +1148,27 @@ export default function App() {
                  <nav className="fixed bottom-0 sm:static sm:h-screen w-full sm:w-64 bg-white dark:bg-gray-800 shadow-lg sm:shadow-none border-t sm:border-r border-gray-200 p-2 sm:p-4 z-40">
                      <div className="hidden sm:flex sm:flex-col sm:justify-start sm:gap-2 h-full">
                          <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
-                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" /><NavItem icon={Sparkles} label="Rutina con IA" viewName="ai-workout" /><NavItem icon={Dumbbell} label="Rutina Manual" viewName="manual-workout" /><NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" /><NavItem icon={Calendar} label="Plan Semanal" viewName="workout" /><NavItem icon={History} label="Historial" viewName="history" /><NavItem icon={User} label="Progreso" viewName="progress" /><NavItem icon={Utensils} label="Comidas" viewName="food" /><NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" /><NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
+                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
+                         <NavItem icon={Zap} label="Entrenar" viewName="workout-starter" />
+                         <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
+                         <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
+                         <NavItem icon={History} label="Historial" viewName="history" />
+                         <NavItem icon={User} label="Progreso" viewName="progress" />
+                         <NavItem icon={Utensils} label="Comidas" viewName="food" />
+                         <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
+                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                          <div className="mt-auto"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">{isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span></button></div>
                      </div>
                      <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
-                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" /><NavItem icon={Sparkles} label="Rutina IA" viewName="ai-workout" /><NavItem icon={Dumbbell} label="Manual" viewName="manual-workout" /><NavItem icon={Bot} label="Chat" viewName="ai-chat" /><NavItem icon={Calendar} label="Plan" viewName="workout" /><NavItem icon={History} label="Historial" viewName="history" /><NavItem icon={User} label="Progreso" viewName="progress" /><NavItem icon={Utensils} label="Comidas" viewName="food" /><NavItem icon={PlusCircle} label="Alimentos" viewName="database" /><NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
+                         <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
+                         <NavItem icon={Zap} label="Entrenar" viewName="workout-starter" />
+                         <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
+                         <NavItem icon={Calendar} label="Plan" viewName="workout" />
+                         <NavItem icon={History} label="Historial" viewName="history" />
+                         <NavItem icon={User} label="Progreso" viewName="progress" />
+                         <NavItem icon={Utensils} label="Comidas" viewName="food" />
+                         <NavItem icon={PlusCircle} label="Alimentos" viewName="database" />
+                         <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                          <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">{isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="text-xs font-medium">{isDarkMode ? 'Claro' : 'Oscuro'}</span></button>
                      </div>
                  </nav>
@@ -1036,4 +1177,3 @@ export default function App() {
         </div>
     );
 }
-�
