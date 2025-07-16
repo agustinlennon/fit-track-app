@@ -313,7 +313,6 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
             <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
        </div>
 
-       {/* --- Tarjeta Unificada --- */}
        <Card className="flex flex-col gap-4">
             <div>
                 <h3 className="font-bold text-xl text-gray-800 dark:text-white">Foco del Día</h3>
@@ -737,8 +736,8 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     const [editingWorkout, setEditingWorkout] = useState(null);
 
     const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
-    const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos'];
-    const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee'];
+    const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
+    const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
 
     const workoutsByDate = useMemo(() => {
         return (completedWorkouts || []).reduce((acc, workout) => {
@@ -786,7 +785,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     const getWorkoutIntensity = (exercises) => {
         if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
         const totalSets = exercises.reduce((sum, ex) => sum + (parseInt(ex.sets, 10) || 0), 0);
-        if (totalSets > 20) return { level: 'Intenso', icon: '🔥🔥🔥' };
+        if (totalSets > 20) return { level: 'Intenso', icon: '🔥�🔥' };
         if (totalSets > 12) return { level: 'Moderado', icon: '🔥🔥' };
         return { level: 'Ligero', icon: '🔥' };
     };
@@ -930,6 +929,7 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
     const [fatigueLevel, setFatigueLevel] = useState('normal');
     const [userNotes, setUserNotes] = useState('');
     const [selectedExercises, setSelectedExercises] = useState({});
+    const [activeFilter, setActiveFilter] = useState('Todos');
 
     const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
     
@@ -954,6 +954,13 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
         });
         return groups;
     }, [favoriteExercises]);
+
+    const filterTags = useMemo(() => ['Todos', ...Object.keys(groupedFavorites).filter(g => groupedFavorites[g].length > 0)], [groupedFavorites]);
+
+    const filteredExercises = useMemo(() => {
+        if (activeFilter === 'Todos') return favoriteExercises;
+        return groupedFavorites[activeFilter] || [];
+    }, [activeFilter, favoriteExercises, groupedFavorites]);
 
     const handleGenerateAiRoutine = async () => {
         setIsLoading(true);
@@ -999,32 +1006,6 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
         setSelectedExercises(prev => ({ ...prev, [exerciseName]: !prev[exerciseName] }));
     };
 
-    const AccordionSection = ({ title, exercises }) => {
-        const [isOpen, setIsOpen] = useState(true);
-        if (exercises.length === 0) return null;
-        return (
-            <div className="border-b border-gray-200 dark:border-gray-700">
-                <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4">
-                    <h4 className="font-bold text-lg">{title} ({exercises.length})</h4>
-                    <ChevronDown className={`transform transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {isOpen && (
-                    <div className="p-4 pt-0 space-y-2">
-                        {exercises.map(ex => (
-                             <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
-                                <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}>
-                                    <input type="checkbox" readOnly checked={!!selectedExercises[ex.name]} className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"/>
-                                    <span className="ml-3 font-semibold">{ex.name}</span>
-                                </div>
-                                <button onClick={() => handleToggleFavorite(ex)} className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1" aria-label={`Eliminar ${ex.name} de favoritos`}><Trash2 size={18} /></button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    };
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1036,16 +1017,16 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
                 <h3 className="text-xl font-bold mb-4 text-center text-blue-600 dark:text-blue-400">Opción 1: Generar con IA</h3>
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label>
-                        <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg">
-                            <option value="baja">Baja energía</option>
-                            <option value="normal">Normal</option>
-                            <option value="alta">Mucha energía</option>
-                        </select>
+                        <label className="block text-sm font-medium mb-2 text-center">¿Cómo te sientes de energía hoy?</label>
+                        <div className="grid grid-cols-3 gap-2">
+                           <Button onClick={() => setFatigueLevel('baja')} variant={fatigueLevel === 'baja' ? 'primary' : 'secondary'} className="flex-col h-20"><Zap size={24} className="text-red-500"/>Baja</Button>
+                           <Button onClick={() => setFatigueLevel('normal')} variant={fatigueLevel === 'normal' ? 'primary' : 'secondary'} className="flex-col h-20"><Zap size={24} className="text-yellow-500"/>Normal</Button>
+                           <Button onClick={() => setFatigueLevel('alta')} variant={fatigueLevel === 'alta' ? 'primary' : 'secondary'} className="flex-col h-20"><Zap size={24} className="text-green-500"/>Alta</Button>
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
-                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" rows="2"></textarea>
+                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros, tengo poco tiempo..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" rows="2"></textarea>
                     </div>
                     <Button onClick={handleGenerateAiRoutine} disabled={isLoading} className="w-full">
                         <Sparkles size={18}/>
@@ -1058,11 +1039,29 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
 
             <Card>
                 <h3 className="text-xl font-bold mb-4 text-center text-green-600 dark:text-green-400">Opción 2: Crear desde Favoritos</h3>
-                <div>
-                    {Object.entries(groupedFavorites).map(([groupName, exercises]) => (
-                        <AccordionSection key={groupName} title={groupName} exercises={exercises} />
+                <div className="mb-4">
+                    <p className="font-semibold mb-2">Filtrar por grupo muscular:</p>
+                    <div className="flex flex-wrap gap-2">
+                        {filterTags.map(tag => (
+                            <button key={tag} onClick={() => setActiveFilter(tag)} className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${activeFilter === tag ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'}`}>
+                                {tag}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                    {filteredExercises.map(ex => (
+                         <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                            <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}>
+                                <input type="checkbox" readOnly checked={!!selectedExercises[ex.name]} className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"/>
+                                <span className="ml-3 font-semibold">{ex.name}</span>
+                            </div>
+                            <button onClick={() => handleToggleFavorite(ex)} className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1" aria-label={`Eliminar ${ex.name} de favoritos`}><Trash2 size={18} /></button>
+                        </div>
                     ))}
                 </div>
+
                 {favoriteExercises.length > 0 && (
                     <Button onClick={handleCreateManualRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6">
                         <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
@@ -1208,3 +1207,4 @@ export default function App() {
         </div>
     );
 }
+�
