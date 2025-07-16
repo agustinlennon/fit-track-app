@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull } from 'lucide-react';
 
 
 // --- FUNCIÓN AUXILIAR ---
@@ -932,35 +932,19 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
     const [activeFilter, setActiveFilter] = useState('Todos');
 
     const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
-    
-    const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
-    const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
-    const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
 
-    const groupedFavorites = useMemo(() => {
-        const groups = {
-            'Tren Superior': [],
-            'Tren Inferior': [],
-            'Cardio/Pliometría': [],
-            'Otros': []
-        };
-        favoriteExercises.forEach(ex => {
-            const muscle = (ex.muscleGroup || '').toLowerCase();
-            const name = (ex.name || '').toLowerCase();
-            if (TREN_SUPERIOR_MUSCLES.some(m => muscle.includes(m))) { groups['Tren Superior'].push(ex); }
-            else if (TREN_INFERIOR_MUSCLES.some(m => muscle.includes(m))) { groups['Tren Inferior'].push(ex); }
-            else if (CARDIO_KEYWORDS.some(k => muscle.includes(k) || name.includes(k))) { groups['Cardio/Pliometría'].push(ex); }
-            else { groups['Otros'].push(ex); }
-        });
-        return groups;
+    const filterTags = useMemo(() => {
+        if (!favoriteExercises) return ['Todos'];
+        const muscleGroups = new Set(favoriteExercises.map(ex => ex.muscleGroup || 'Otros'));
+        return ['Todos', ...Array.from(muscleGroups).sort()];
     }, [favoriteExercises]);
 
-    const filterTags = useMemo(() => ['Todos', ...Object.keys(groupedFavorites).filter(g => groupedFavorites[g].length > 0)], [groupedFavorites]);
-
     const filteredExercises = useMemo(() => {
-        if (activeFilter === 'Todos') return favoriteExercises;
-        return groupedFavorites[activeFilter] || [];
-    }, [activeFilter, favoriteExercises, groupedFavorites]);
+        if (activeFilter === 'Todos') {
+            return favoriteExercises;
+        }
+        return favoriteExercises.filter(ex => (ex.muscleGroup || 'Otros') === activeFilter);
+    }, [activeFilter, favoriteExercises]);
 
     const handleGenerateAiRoutine = async () => {
         setIsLoading(true);
@@ -981,7 +965,6 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
                 setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
             } else {
                 setInProgressWorkout({ type: 'ai', exercises: editableRoutine });
-                setView('active-workout');
             }
         } catch (err) {
             let errorMessage = `Ocurrió un error al contactar al asistente de IA. Error: ${err.message}`;
@@ -999,7 +982,6 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
             .filter(ex => selectedExercises[ex.name])
             .map(ex => ({ ...ex, completed: false, sets: ex.sets || '3', reps: ex.reps || '10', weight: ex.weight || '0' }));
         setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises });
-        setView('active-workout');
     };
 
     const handleToggleExerciseSelection = (exerciseName) => {
@@ -1019,9 +1001,9 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
                     <div>
                         <label className="block text-sm font-medium mb-2 text-center">¿Cómo te sientes de energía hoy?</label>
                         <div className="grid grid-cols-3 gap-2">
-                           <Button onClick={() => setFatigueLevel('baja')} variant={fatigueLevel === 'baja' ? 'primary' : 'secondary'} className="flex-col h-20"><Zap size={24} className="text-red-500"/>Baja</Button>
-                           <Button onClick={() => setFatigueLevel('normal')} variant={fatigueLevel === 'normal' ? 'primary' : 'secondary'} className="flex-col h-20"><Zap size={24} className="text-yellow-500"/>Normal</Button>
-                           <Button onClick={() => setFatigueLevel('alta')} variant={fatigueLevel === 'alta' ? 'primary' : 'secondary'} className="flex-col h-20"><Zap size={24} className="text-green-500"/>Alta</Button>
+                           <Button onClick={() => setFatigueLevel('baja')} variant={fatigueLevel === 'baja' ? 'primary' : 'secondary'} className="flex-col py-2 text-sm"><BatteryLow size={20} className="mb-1 text-red-500"/>Baja</Button>
+                           <Button onClick={() => setFatigueLevel('normal')} variant={fatigueLevel === 'normal' ? 'primary' : 'secondary'} className="flex-col py-2 text-sm"><BatteryMedium size={20} className="mb-1 text-yellow-500"/>Normal</Button>
+                           <Button onClick={() => setFatigueLevel('alta')} variant={fatigueLevel === 'alta' ? 'primary' : 'secondary'} className="flex-col py-2 text-sm"><BatteryFull size={20} className="mb-1 text-green-500"/>Alta</Button>
                         </div>
                     </div>
                     <div>
