@@ -1108,7 +1108,23 @@ export default function App() {
         }
     }, [inProgressWorkout]);
 
-    const handleRegister = async (email, password, name) => { const { auth, db } = firebaseServices; if (!auth.currentUser || !auth.currentUser.isAnonymous) { throw new Error("Error: No hay una sesión de invitado activa para vincular."); } const credential = EmailAuthProvider.credential(email, password); const userCredential = await linkWithCredential(auth.currentUser, credential); const newUser = userCredential.user; const userDocRef = doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`); await setDoc(userDocRef, { name: name, email: newUser.email, }, { merge: true }); };
+    const handleRegister = async (email, password, name) => {
+        const { auth, db } = firebaseServices;
+        const currentUser = auth.currentUser;
+        if (currentUser && currentUser.isAnonymous) {
+            const credential = EmailAuthProvider.credential(email, password);
+            const userCredential = await linkWithCredential(currentUser, credential);
+            const newUser = userCredential.user;
+            const userDocRef = doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`);
+            await setDoc(userDocRef, { name: name, email: newUser.email, }, { merge: true });
+        } else {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const newUser = userCredential.user;
+            const userDocRef = doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`);
+            const initialData = { name: name, email: newUser.email, goals: { calories: 2500, protein: 180, carbs: 250, fat: 70 }, objectivePrompt: 'Mis objetivos principales son ganar masa muscular y mantenerme saludable.', workoutOptions: ['Descanso', 'Natación', 'Pesas - Tren Superior', 'Pesas - Tren Inferior', 'Fútbol', 'Cardio Ligero', 'Full Body'], favoriteExercises: [], workoutSchedule: { lunes: [{time: '18:00', name: 'Pesas - Tren Superior'}], martes: [{time: '19:00', name: 'Pesas - Tren Inferior'}], miercoles: [{time: '18:00', name: 'Natación'}], jueves: [{time: '19:00', name: 'Pesas - Tren Superior'}], viernes: [{time: '19:00', name: 'Pesas - Tren Inferior'}], sabado: [{time: '11:00', name: 'Fútbol'}], domingo: [] } };
+            await setDoc(userDocRef, initialData);
+        }
+    };
     const handleLogin = async (email, password) => { const { auth } = firebaseServices; await signInWithEmailAndPassword(auth, email, password); };
     const handleLogout = async () => { if (!firebaseServices) return; const { auth } = firebaseServices; await signOut(auth); setView('dashboard'); };
     const handleUpdateGoals = async (newGoals) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { goals: newGoals }, { merge: true }); };
