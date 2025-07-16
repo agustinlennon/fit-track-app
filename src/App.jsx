@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown } from 'lucide-react';
 
 
 // --- FUNCIÓN AUXILIAR ---
@@ -334,7 +334,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
                     <Zap size={18}/> Continuar Rutina en Progreso
                 </Button>
             ) : (
-                <Button onClick={() => setView('workout-starter')} className="w-full">
+                <Button onClick={() => setView('workout-creation')} className="w-full">
                     <Dumbbell size={18}/> Empezar a Entrenar
                 </Button>
             )}
@@ -885,33 +885,6 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFo
     );
 };
 
-const ManualWorkoutGenerator = ({ userData, handleGoBack, setInProgressWorkout, setView, handleToggleFavorite }) => {
-    const [selectedMuscle, setSelectedMuscle] = useState('Todos'); const [selectedExercises, setSelectedExercises] = useState({});
-    const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
-    const muscleGroups = useMemo(() => { const groups = new Set(favoriteExercises.map(ex => ex.muscleGroup || 'Sin Grupo')); return ['Todos', ...Array.from(groups)]; }, [favoriteExercises]);
-    const filteredExercises = useMemo(() => { if (selectedMuscle === 'Todos') return favoriteExercises; return favoriteExercises.filter(ex => (ex.muscleGroup || 'Sin Grupo') === selectedMuscle); }, [favoriteExercises, selectedMuscle]);
-    const handleToggleExerciseSelection = (exerciseName) => { setSelectedExercises(prev => ({ ...prev, [exerciseName]: !prev[exerciseName] })); };
-    const handleCreateRoutine = () => { const newRoutineExercises = favoriteExercises.filter(ex => selectedExercises[ex.name]).map(ex => ({ ...ex, completed: false })); setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises }); setView('active-workout'); };
-    return (
-        <div>
-            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina Manual</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
-            <Card>
-                <h3 className="font-bold text-lg mb-4">1. Filtra y selecciona tus ejercicios favoritos</h3>
-                <div className="mb-4"><label className="block text-sm font-medium mb-1">Filtrar por grupo muscular</label><select value={selectedMuscle} onChange={(e) => setSelectedMuscle(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg">{muscleGroups.map(group => <option key={group} value={group}>{group}</option>)}</select></div>
-                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                    {filteredExercises.length > 0 ? filteredExercises.map(ex => (
-                        <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
-                            <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}><input type="checkbox" readOnly checked={!!selectedExercises[ex.name]} className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"/><span className="ml-3 font-semibold">{ex.name}</span></div>
-                            <div className="flex items-center flex-shrink-0 ml-auto"><span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-full">{ex.muscleGroup || 'N/A'}</span><button onClick={() => handleToggleFavorite(ex)} className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1" aria-label={`Eliminar ${ex.name} de favoritos`}><Trash2 size={18} /></button></div>
-                        </div>
-                    )) : (<p className="text-center text-gray-500 p-4">No tienes ejercicios favoritos en este grupo. ¡Añade algunos desde la rutina con IA!</p>)}
-                </div>
-                 <Button onClick={handleCreateRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6"><PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios</Button>
-            </Card>
-        </div>
-    );
-};
-
 const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGoBack }) => {
     const [messages, setMessages] = useState([{ from: 'ai', text: `¡Hola ${userData?.name || 'Atleta'}! Soy tu asistente personal. Tengo acceso a tu progreso y objetivos. ¿En qué puedo ayudarte hoy?` }]);
     const [input, setInput] = useState(''); const [isLoading, setIsLoading] = useState(false); const chatEndRef = useRef(null);
@@ -950,42 +923,39 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
     );
 };
 
-// --- Nuevo componente para el flujo unificado de creación de rutinas ---
-const WorkoutStarter = ({ setView }) => {
-    return (
-        <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Crear Rutina</h2>
-                <Button onClick={() => setView('dashboard')} variant="secondary">Volver</Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card onClick={() => setView('ai-workout-setup')} className="cursor-pointer hover:border-blue-500 border-2 border-transparent transition-all duration-200 hover:shadow-xl hover:-translate-y-1">
-                    <div className="flex flex-col items-center text-center">
-                        <Sparkles className="w-16 h-16 text-blue-500 mb-4"/>
-                        <h3 className="text-xl font-bold mb-2">Generar con IA</h3>
-                        <p className="text-gray-500 dark:text-gray-400">Deja que tu coach personal cree una rutina optimizada para ti basada en tus objetivos y energía.</p>
-                    </div>
-                </Card>
-                <Card onClick={() => setView('manual-workout-selection')} className="cursor-pointer hover:border-green-500 border-2 border-transparent transition-all duration-200 hover:shadow-xl hover:-translate-y-1">
-                    <div className="flex flex-col items-center text-center">
-                        <HeartPulse className="w-16 h-16 text-green-500 mb-4"/>
-                        <h3 className="text-xl font-bold mb-2">Crear desde Favoritos</h3>
-                        <p className="text-gray-500 dark:text-gray-400">Elige tus ejercicios preferidos y arma la rutina perfecta para hoy.</p>
-                    </div>
-                </Card>
-            </div>
-        </div>
-    );
-};
-
-// --- Nuevo componente para la configuración de la rutina con IA ---
-const AiWorkoutSetup = ({ userData, handleGoBack, setInProgressWorkout, setView }) => {
+// --- Nuevo componente unificado para la creación de rutinas ---
+const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleToggleFavorite }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [fatigueLevel, setFatigueLevel] = useState('normal');
     const [userNotes, setUserNotes] = useState('');
+    const [selectedExercises, setSelectedExercises] = useState({});
 
-    const getWorkoutSuggestion = async () => {
+    const favoriteExercises = useMemo(() => userData?.favoriteExercises || [], [userData]);
+    
+    const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
+    const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
+    const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
+
+    const groupedFavorites = useMemo(() => {
+        const groups = {
+            'Tren Superior': [],
+            'Tren Inferior': [],
+            'Cardio/Pliometría': [],
+            'Otros': []
+        };
+        favoriteExercises.forEach(ex => {
+            const muscle = (ex.muscleGroup || '').toLowerCase();
+            const name = (ex.name || '').toLowerCase();
+            if (TREN_SUPERIOR_MUSCLES.some(m => muscle.includes(m))) { groups['Tren Superior'].push(ex); }
+            else if (TREN_INFERIOR_MUSCLES.some(m => muscle.includes(m))) { groups['Tren Inferior'].push(ex); }
+            else if (CARDIO_KEYWORDS.some(k => muscle.includes(k) || name.includes(k))) { groups['Cardio/Pliometría'].push(ex); }
+            else { groups['Otros'].push(ex); }
+        });
+        return groups;
+    }, [favoriteExercises]);
+
+    const handleGenerateAiRoutine = async () => {
         setIsLoading(true);
         setError('');
         const historySummary = Array.isArray(userData.completedWorkouts) ? userData.completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
@@ -1016,16 +986,58 @@ const AiWorkoutSetup = ({ userData, handleGoBack, setInProgressWorkout, setView 
             setIsLoading(false);
         }
     };
-    
+
+    const handleCreateManualRoutine = () => {
+        const newRoutineExercises = favoriteExercises
+            .filter(ex => selectedExercises[ex.name])
+            .map(ex => ({ ...ex, completed: false, sets: ex.sets || '3', reps: ex.reps || '10', weight: ex.weight || '0' }));
+        setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises });
+        setView('active-workout');
+    };
+
+    const handleToggleExerciseSelection = (exerciseName) => {
+        setSelectedExercises(prev => ({ ...prev, [exerciseName]: !prev[exerciseName] }));
+    };
+
+    const AccordionSection = ({ title, exercises }) => {
+        const [isOpen, setIsOpen] = useState(true);
+        if (exercises.length === 0) return null;
+        return (
+            <div className="border-b border-gray-200 dark:border-gray-700">
+                <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4">
+                    <h4 className="font-bold text-lg">{title} ({exercises.length})</h4>
+                    <ChevronDown className={`transform transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isOpen && (
+                    <div className="p-4 pt-0 space-y-2">
+                        {exercises.map(ex => (
+                             <div key={ex.name} className={`flex items-center p-3 rounded-lg transition-colors ${selectedExercises[ex.name] ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                                <div className="flex items-center flex-grow cursor-pointer" onClick={() => handleToggleExerciseSelection(ex.name)}>
+                                    <input type="checkbox" readOnly checked={!!selectedExercises[ex.name]} className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"/>
+                                    <span className="ml-3 font-semibold">{ex.name}</span>
+                                </div>
+                                <button onClick={() => handleToggleFavorite(ex)} className="ml-4 text-gray-400 hover:text-red-500 transition-colors p-1" aria-label={`Eliminar ${ex.name} de favoritos`}><Trash2 size={18} /></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
-        <div>
-            <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Rutina con IA</h2><Button onClick={() => handleGoBack('workout-starter')} variant="secondary">Volver</Button></div>
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-bold text-gray-800 dark:text-white">Crear Rutina</h2>
+                <Button onClick={() => setView('dashboard')} variant="secondary">Volver</Button>
+            </div>
+
             <Card>
+                <h3 className="text-xl font-bold mb-4 text-center text-blue-600 dark:text-blue-400">Opción 1: Generar con IA</h3>
                 <div className="space-y-4">
-                    <h3 className="font-bold text-lg text-center">¡Personaliza tu rutina de hoy!</h3>
                     <div>
                         <label className="block text-sm font-medium mb-1">¿Cómo te sientes de energía hoy?</label>
-                        <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded">
+                        <select value={fatigueLevel} onChange={(e) => setFatigueLevel(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg">
                             <option value="baja">Baja energía</option>
                             <option value="normal">Normal</option>
                             <option value="alta">Mucha energía</option>
@@ -1033,16 +1045,33 @@ const AiWorkoutSetup = ({ userData, handleGoBack, setInProgressWorkout, setView 
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
-                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded" rows="2"></textarea>
+                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" rows="2"></textarea>
                     </div>
-                    <Button onClick={getWorkoutSuggestion} disabled={isLoading} className="w-full">
+                    <Button onClick={handleGenerateAiRoutine} disabled={isLoading} className="w-full">
                         <Sparkles size={18}/>
-                        {isLoading ? 'Generando tu rutina...' : 'Generar Rutina'}
+                        {isLoading ? 'Generando...' : 'Generar Rutina con IA'}
                     </Button>
+                    {isLoading && <p className="text-center text-sm animate-pulse">El coach IA está pensando...</p>}
+                    {error && <p className="text-center text-sm text-red-500">{error}</p>}
                 </div>
             </Card>
-            {isLoading && <div className="mt-6 text-center p-4"><p className="animate-pulse text-lg">El entrenador IA está preparando tu sesión...</p></div>}
-            {error && <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg">{error}</div>}
+
+            <Card>
+                <h3 className="text-xl font-bold mb-4 text-center text-green-600 dark:text-green-400">Opción 2: Crear desde Favoritos</h3>
+                <div>
+                    {Object.entries(groupedFavorites).map(([groupName, exercises]) => (
+                        <AccordionSection key={groupName} title={groupName} exercises={exercises} />
+                    ))}
+                </div>
+                {favoriteExercises.length > 0 && (
+                    <Button onClick={handleCreateManualRoutine} disabled={Object.values(selectedExercises).every(v => !v)} className="w-full mt-6">
+                        <PlusCircle size={18} /> Crear Rutina con {Object.values(selectedExercises).filter(v => v).length} Ejercicios
+                    </Button>
+                )}
+                 {favoriteExercises.length === 0 && (
+                     <p className="text-center text-gray-500 p-4">No tienes ejercicios favoritos. ¡Añade algunos desde una rutina con IA para empezar!</p>
+                 )}
+            </Card>
         </div>
     );
 };
@@ -1092,6 +1121,12 @@ export default function App() {
         return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
     }, [isAuthReady, firebaseServices, user]);
 
+    useEffect(() => {
+        if (inProgressWorkout && view !== 'active-workout') {
+            setView('active-workout');
+        }
+    }, [inProgressWorkout]);
+
     const handleRegister = async (email, password, name) => { const { auth, db } = firebaseServices; if (!auth.currentUser || !auth.currentUser.isAnonymous) { throw new Error("Error: No hay una sesión de invitado activa para vincular."); } const credential = EmailAuthProvider.credential(email, password); const userCredential = await linkWithCredential(auth.currentUser, credential); const newUser = userCredential.user; const userDocRef = doc(db, `artifacts/${appId}/users/${newUser.uid}/profile/data`); await setDoc(userDocRef, { name: name, email: newUser.email, }, { merge: true }); };
     const handleLogin = async (email, password) => { const { auth } = firebaseServices; await signInWithEmailAndPassword(auth, email, password); };
     const handleLogout = async () => { if (!firebaseServices) return; const { auth } = firebaseServices; await signOut(auth); setView('dashboard'); };
@@ -1118,8 +1153,6 @@ export default function App() {
     }
 
     const renderView = () => {
-        // **FIXED** This logic was moved to the NavItem onClick to prevent navigation bugs.
-        // The view is now changed only by explicit user actions.
         switch (view) {
             case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
@@ -1127,9 +1160,7 @@ export default function App() {
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} />;
-            case 'workout-starter': return <WorkoutStarter setView={setView} />;
-            case 'ai-workout-setup': return <AiWorkoutSetup userData={userData} handleGoBack={setView} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} />;
-            case 'manual-workout-selection': return <ManualWorkoutGenerator userData={userData} handleGoBack={() => setView('workout-starter')} setInProgressWorkout={handleSetInProgressWorkout} setView={setView} handleToggleFavorite={handleToggleFavorite} />;
+            case 'workout-creation': return <WorkoutCreationView userData={userData} setView={setView} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} />;
             case 'active-workout': return <ActiveWorkoutView userData={userData} handleGoBack={setView} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} inProgressWorkout={inProgressWorkout} />;
@@ -1137,7 +1168,7 @@ export default function App() {
     };
 
     const NavItem = ({ icon: Icon, label, viewName }) => (
-        <button onClick={() => { if (inProgressWorkout && viewName === 'workout-starter') { setView('active-workout'); } else { setView(viewName); } }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => { if (inProgressWorkout && viewName === 'workout-creation') { setView('active-workout'); } else { setView(viewName); } }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName || (view === 'active-workout' && viewName === 'workout-creation') ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             <Icon size={22} /><span className="text-xs sm:text-base font-medium">{label}</span>
         </button>
     );
@@ -1149,7 +1180,7 @@ export default function App() {
                      <div className="hidden sm:flex sm:flex-col sm:justify-start sm:gap-2 h-full">
                          <div className="flex items-center gap-3 mb-8"><Flame className="h-8 w-8 text-blue-500"/><h1 className="text-2xl font-bold">FitTrack AI</h1></div>
                          <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
-                         <NavItem icon={Zap} label="Entrenar" viewName="workout-starter" />
+                         <NavItem icon={Zap} label="Entrenar" viewName="workout-creation" />
                          <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
                          <NavItem icon={Calendar} label="Plan Semanal" viewName="workout" />
                          <NavItem icon={History} label="Historial" viewName="history" />
@@ -1161,7 +1192,7 @@ export default function App() {
                      </div>
                      <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
                          <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
-                         <NavItem icon={Zap} label="Entrenar" viewName="workout-starter" />
+                         <NavItem icon={Zap} label="Entrenar" viewName="workout-creation" />
                          <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
                          <NavItem icon={Calendar} label="Plan" viewName="workout" />
                          <NavItem icon={History} label="Historial" viewName="history" />
