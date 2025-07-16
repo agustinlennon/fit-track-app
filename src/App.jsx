@@ -394,7 +394,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   return (
     <div className="space-y-6">
        <div className="mb-8">
-            <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
+            <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Usuario'}!</h1>
             <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
        </div>
        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
