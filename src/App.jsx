@@ -394,7 +394,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   return (
     <div className="space-y-6">
        <div className="mb-8">
-            <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Usuario'}!</h1>
+            <h1 className="text-4xl font-bold">¡Hola, {userData?.name || 'Atleta'}!</h1>
             <p className="text-gray-500 dark:text-gray-400">¿Listo para hoy?</p>
        </div>
        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
@@ -2142,16 +2142,9 @@ export default function App() {
     }
 
     const renderView = () => {
-        if (inProgressWorkout && (view === 'ai-workout' || view === 'manual-workout')) {
-             return <AiWorkoutGeneratorView
-                userData={userData}
-                handleGoBack={handleClearInProgressWorkout}
-                handleSaveWorkout={handleSaveWorkout}
-                inProgressWorkout={inProgressWorkout}
-                setInProgressWorkout={handleSetInProgressWorkout}
-                handleToggleFavorite={handleToggleFavorite}
-                handleClearInProgressWorkout={handleClearInProgressWorkout}
-            />;
+        if (inProgressWorkout && view !== 'dashboard') {
+             const targetView = inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout';
+             if (view !== targetView) setView(targetView);
         }
 
         switch (view) {
@@ -2169,7 +2162,14 @@ export default function App() {
     };
 
     const NavItem = ({ icon: Icon, label, viewName }) => (
-        <button onClick={() => setView(viewName)} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => {
+            if (inProgressWorkout && (viewName === 'ai-workout' || viewName === 'manual-workout')) {
+                // If a workout is in progress, these buttons should lead to it.
+                setView(inProgressWorkout.type === 'ai' ? 'ai-workout' : 'manual-workout');
+            } else {
+                setView(viewName);
+            }
+        }} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg w-full text-left transition-colors sm:flex-row sm:justify-start sm:gap-3 sm:px-4 ${view === viewName ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             <Icon size={22} /><span className="text-xs sm:text-base font-medium">{label}</span>
         </button>
     );
