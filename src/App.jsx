@@ -3,14 +3,62 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle } from 'lucide-react';
 
 
-// --- FUNCIÓN AUXILIAR ---
+// --- FUNCIONES AUXILIARES Y DE LÓGICA COMPARTIDA ---
 const normalizeString = (str) => {
   if (!str) return '';
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
+
+const DEPORTES_KEYWORDS = ['natación', 'futbol', 'tenis', 'crossfit'];
+const FLEXIBILIDAD_KEYWORDS = ['yoga', 'estiramientos', 'flexibilidad', 'movilidad'];
+const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
+const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
+const CARDIO_KEYWORDS = ['cardio', 'correr', 'cinta', 'bicicleta', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
+
+const getWorkoutFocus = (exercises) => {
+    if (!exercises || exercises.length === 0) return 'Descanso';
+    const firstExerciseName = (exercises[0].name || '').toLowerCase();
+    
+    const sportKeyword = DEPORTES_KEYWORDS.find(sport => firstExerciseName.includes(sport));
+    if (sportKeyword) return "Deportes";
+
+    const flexKeyword = FLEXIBILIDAD_KEYWORDS.find(flex => firstExerciseName.includes(flex));
+    if (flexKeyword) return "Flexibilidad";
+
+    const counts = { superior: 0, inferior: 0, cardio: 0 };
+    exercises.forEach(ex => {
+        const muscle = (ex.muscleGroup || '').toLowerCase();
+        const name = (ex.name || '').toLowerCase();
+        if (TREN_SUPERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.superior++; } 
+        else if (TREN_INFERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.inferior++; } 
+        else if (CARDIO_KEYWORDS.some(k => muscle.includes(k) || name.includes(k))) { counts.cardio++; }
+    });
+    const totalExercises = exercises.length;
+    if (counts.cardio / totalExercises >= 0.5) return 'Cardio';
+    if (counts.superior / totalExercises > 0.7) return 'Tren Superior';
+    if (counts.inferior / totalExercises > 0.7) return 'Tren Inferior';
+    if (counts.superior > 0 && counts.inferior > 0) return 'Full Body';
+    if (counts.superior > 0) return 'Tren Superior';
+    if (counts.inferior > 0) return 'Tren Inferior';
+    return 'General';
+};
+
+const getFocusVisuals = (focus, size = 14) => {
+    const normalizedFocus = (focus || '').toLowerCase();
+    switch (normalizedFocus) {
+        case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200', icon: <Dumbbell size={size} className="text-blue-500"/> };
+        case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200', icon: <Footprints size={size} className="text-green-500"/> };
+        case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200', icon: <HeartPulse size={size} className="text-orange-500"/> };
+        case 'deportes': return { color: 'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200', icon: <Trophy size={size} className="text-purple-500"/> };
+        case 'flexibilidad': return { color: 'bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-200', icon: <PersonStanding size={size} className="text-teal-500"/> };
+        case 'full body': return { color: 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200', icon: <Activity size={size} className="text-indigo-500"/> };
+        default: return { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-800 dark:text-gray-200', icon: <Dumbbell size={size} className="text-gray-500"/> };
+    }
+};
+
 
 // --- INICIALIZACIÓN DE FIREBASE Y SERVICIOS ---
 let firebaseConfig;
@@ -175,8 +223,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   const getDayPlan = (date) => {
     const dayName = normalizeString(date.toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
     const plan = userData?.workoutSchedule?.[dayName] || [];
-    const text = Array.isArray(plan) && plan.length > 0 ? plan.map(w => `${w.name} a las ${w.time}`).join(' y ') : 'Descanso';
-    return { name: dayName, text: text };
+    return Array.isArray(plan) && plan.length > 0 ? plan : [{ name: 'Descanso', time: '' }];
   };
 
   const todayDate = new Date();
@@ -188,7 +235,8 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
     try {
         const weather = "Día fresco de invierno, 12°C.";
         const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
-        const prompt = `Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}. Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}: - **Mi objetivo principal:** ${objectivePrompt}. - **Mi plan para hoy (${todaysPlan.name}) es:** ${todaysPlan.text}. - **El clima de hoy:** ${weather}. Basado en esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos: - Una sugerencia rápida para la comida pre y post entrenamiento. - Un consejo clave sobre hidratación o suplementación relevante para hoy. - Finaliza con una frase motivadora.`;
+        const planText = todaysPlan.map(p => p.name).join(' y ');
+        const prompt = `Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}. Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}: - **Mi objetivo principal:** ${objectivePrompt}. - **Mi plan para hoy (${todaysPlan[0].name}) es:** ${planText}. - **El clima de hoy:** ${weather}. Basado en esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos: - Una sugerencia rápida para la comida pre y post entrenamiento. - Un consejo clave sobre hidratación o suplementación relevante para hoy. - Finaliza con una frase motivadora.`;
         const recommendationText = await callGeminiAPI(prompt);
         setAiRecommendation({ text: recommendationText, loading: false });
     } catch (error) {
@@ -316,13 +364,17 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
        <Card className="flex flex-col gap-4">
             <div>
                 <h3 className="font-bold text-xl text-gray-800 dark:text-white">Foco del Día</h3>
-                {todaysPlan.text !== 'Descanso' ? (
-                    todaysPlan.text.split(' y ').map((p, i) => {
-                        const parts = p.split(' a las ');
+                {todaysPlan[0].name !== 'Descanso' ? (
+                    todaysPlan.map((p, i) => {
+                        const focus = getWorkoutFocus([{ name: p.name }]); // Wrap in array for consistency
+                        const visuals = getFocusVisuals(focus, 24);
                         return (
-                            <div key={i} className="flex justify-between items-baseline mt-2">
-                                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{parts[0]}</p>
-                                <p className="text-lg text-gray-500 dark:text-gray-400">{parts[1]}</p>
+                            <div key={i} className="flex justify-between items-center mt-2">
+                                <div className="flex items-center gap-3">
+                                    {visuals.icon}
+                                    <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{p.name}</p>
+                                </div>
+                                <p className="text-lg text-gray-500 dark:text-gray-400">{p.time}</p>
                             </div>
                         )
                     })
@@ -693,7 +745,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
     const [restTime, setRestTime] = useState(90);
     const [recalculatingIndex, setRecalculatingIndex] = useState(null);
 
-    // **BUG FIX**: Automatically clear workout if it's empty
     useEffect(() => {
         if (inProgressWorkout && (!inProgressWorkout.exercises || inProgressWorkout.exercises.length === 0)) {
             console.log("Stuck workout state detected. Clearing...");
@@ -799,16 +850,12 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
     );
 };
 
-const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog }) => {
+const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLog, handleDeleteWorkoutLog }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [editingWorkout, setEditingWorkout] = useState(null);
-
-    const DEPORTES_KEYWORDS = ['natación', 'futbol', 'tenis', 'correr', 'cinta', 'bicicleta', 'yoga', 'crossfit', 'estiramientos', 'pliometria'];
-    const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
-    const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
-    const CARDIO_KEYWORDS = ['cardio', 'skipping', 'jacks', 'trote', 'burpee'];
+    const [workoutToDelete, setWorkoutToDelete] = useState(null);
 
     const workoutsByDate = useMemo(() => {
         return (completedWorkouts || []).reduce((acc, workout) => {
@@ -831,57 +878,15 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
         for (let i = 1; i <= daysInMonth; i++) { days.push(new Date(year, month, i)); }
         return days;
     }, [currentDate]);
-
-    const getWorkoutFocus = useCallback((exercises) => {
-        if (!exercises || exercises.length === 0) return 'Descanso';
-
-        const firstExerciseName = (exercises[0].name || '').toLowerCase();
-        const sportKeyword = DEPORTES_KEYWORDS.find(sport => firstExerciseName.includes(sport));
-        if (sportKeyword) {
-            return sportKeyword.charAt(0).toUpperCase() + sportKeyword.slice(1);
-        }
-
-        const counts = { superior: 0, inferior: 0, cardio: 0, otro: 0 };
-        exercises.forEach(ex => {
-            const muscle = (ex.muscleGroup || '').toLowerCase();
-            const name = (ex.name || '').toLowerCase();
-            if (TREN_SUPERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.superior++; } 
-            else if (TREN_INFERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.inferior++; } 
-            else if (CARDIO_KEYWORDS.some(k => muscle.includes(k) || name.includes(k))) { counts.cardio++; } 
-            else { counts.otro++; }
-        });
-        const totalExercises = exercises.length;
-        if (counts.cardio / totalExercises >= 0.5) return 'Cardio';
-        if (counts.superior / totalExercises > 0.7) return 'Tren Superior';
-        if (counts.inferior / totalExercises > 0.7) return 'Tren Inferior';
-        if (counts.superior > 0 && counts.inferior > 0) return 'Full Body';
-        if (counts.superior > 0) return 'Tren Superior';
-        if (counts.inferior > 0) return 'Tren Inferior';
-        return 'General';
-    }, []);
     
     const getWorkoutIntensity = (exercises) => {
         if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
         const totalSets = exercises.reduce((sum, ex) => sum + (parseInt(ex.sets, 10) || 0), 0);
-        if (totalSets > 20) return { level: 'Intenso', icon: '🔥🔥🔥' };
+        if (totalSets > 20) return { level: 'Intenso', icon: '🔥�🔥' };
         if (totalSets > 12) return { level: 'Moderado', icon: '🔥🔥' };
         return { level: 'Ligero', icon: '🔥' };
     };
-
-    const getFocusVisuals = (focus) => {
-        const normalizedFocus = focus.toLowerCase();
-        if (DEPORTES_KEYWORDS.includes(normalizedFocus)) {
-            return { color: 'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200', icon: <Zap size={14} className="text-purple-500"/> };
-        }
-        switch (normalizedFocus) {
-            case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200', icon: <TrendingUp size={14} className="text-blue-500"/> };
-            case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200', icon: <TrendingUp size={14} className="text-green-500"/> };
-            case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200', icon: <Activity size={14} className="text-orange-500"/> };
-            case 'full body': return { color: 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200', icon: <Dumbbell size={14} className="text-indigo-500"/> };
-            default: return { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-800 dark:text-gray-200', icon: <Dumbbell size={14} className="text-gray-500"/> };
-        }
-    };
-
+    
     const handleDayClick = (day) => {
         const dateKey = day.toISOString().slice(0, 10);
         const workoutsForDay = workoutsByDate[dateKey];
@@ -894,6 +899,19 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     };
     
     const openEditModalFromDetail = (workout) => { setIsDetailModalOpen(false); setEditingWorkout(workout); };
+    
+    const confirmDelete = (workoutId) => {
+        setWorkoutToDelete(workoutId);
+        setIsDetailModalOpen(false);
+    };
+
+    const executeDelete = async () => {
+        if (workoutToDelete) {
+            await handleDeleteWorkoutLog(workoutToDelete);
+            setWorkoutToDelete(null);
+        }
+    };
+
     const weekDays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
     return (
@@ -913,19 +931,15 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
                         const workoutsForDay = workoutsByDate[dateKey];
                         const isToday = new Date().toISOString().slice(0, 10) === dateKey;
                         return (
-                            <div 
-                                key={dateKey} 
-                                onClick={() => workoutsForDay && handleDayClick(day)} 
-                                className={`w-full h-24 sm:h-32 p-1 sm:p-2 rounded-lg transition-all duration-200 ${workoutsForDay ? 'bg-gray-100 dark:bg-gray-900/50 cursor-pointer hover:shadow-lg hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-gray-50 dark:bg-gray-800/50'}`}
-                            >
+                            <div key={dateKey} onClick={() => workoutsForDay && handleDayClick(day)} className={`w-full h-24 sm:h-32 p-1 sm:p-2 rounded-lg transition-all duration-200 ${workoutsForDay ? 'bg-gray-100 dark:bg-gray-900/50 cursor-pointer hover:shadow-lg hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
                                 <div className={`font-bold text-sm ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div>
                                 {workoutsForDay && (
                                     <div className="mt-1 space-y-1">
-                                        {workoutsForDay.map((workout, workoutIndex) => {
+                                        {workoutsForDay.map((workout) => {
                                             const focus = getWorkoutFocus(workout.exercises);
                                             const visuals = getFocusVisuals(focus);
                                             return (
-                                                <div key={workout.id || workoutIndex} className={`flex items-center gap-1 text-xs font-semibold p-1 rounded ${visuals.color}`}>
+                                                <div key={workout.id} className={`flex items-center gap-1 text-xs font-semibold p-1 rounded ${visuals.color}`}>
                                                     {visuals.icon}
                                                     <span className="truncate hidden sm:inline">{focus}</span>
                                                 </div>
@@ -938,13 +952,20 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
                     })}
                 </div>
             </Card>
-            {selectedWorkout && (<WorkoutDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} workoutData={selectedWorkout} onEdit={openEditModalFromDetail} getWorkoutFocus={getWorkoutFocus}/>)}
+            {selectedWorkout && (<WorkoutDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} workoutData={selectedWorkout} onEdit={openEditModalFromDetail} onDelete={confirmDelete} />)}
             <EditWorkoutModal workout={editingWorkout} onClose={() => setEditingWorkout(null)} onSave={handleSaveEdit}/>
+            <ConfirmationModal 
+                isOpen={!!workoutToDelete} 
+                onClose={() => setWorkoutToDelete(null)}
+                onConfirm={executeDelete}
+                title="Confirmar Eliminación"
+                message="¿Estás seguro de que quieres eliminar esta rutina? Esta acción no se puede deshacer."
+            />
         </div>
     );
 };
 
-const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFocus }) => {
+const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, onDelete }) => {
     if (!isOpen || !workoutData) return null;
     const { date, workouts } = workoutData;
     
@@ -961,7 +982,10 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFo
                                     <h4 className="font-bold text-lg text-gray-800 dark:text-white">Rutina de las {workoutTime}</h4>
                                     <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">Foco: {focus}</p>
                                 </div>
-                                <Button onClick={() => onEdit(workout)} variant="secondary" className="px-3 py-1 text-sm"><Edit size={16}/> Editar</Button>
+                                <div className="flex gap-2">
+                                    <Button onClick={() => onEdit(workout)} variant="secondary" className="p-2"><Edit size={16}/></Button>
+                                    <Button onClick={() => onDelete(workout.id)} variant="danger" className="p-2"><Trash2 size={16}/></Button>
+                                </div>
                             </div>
                             <ul className="space-y-2 max-h-48 overflow-y-auto pr-2">
                                 {workout.exercises.map((ex, exIndex) => (
@@ -976,6 +1000,25 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFo
                 })}
             </div>
         </Modal>
+    );
+};
+
+const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4">
+            <Card className="w-full max-w-md">
+                <div className="text-center">
+                    <AlertTriangle className="mx-auto h-12 w-12 text-red-500"/>
+                    <h3 className="text-lg font-bold mt-4">{title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{message}</p>
+                </div>
+                <div className="flex justify-center gap-4 mt-6">
+                    <Button onClick={onClose} variant="secondary">Cancelar</Button>
+                    <Button onClick={onConfirm} variant="danger">Confirmar</Button>
+                </div>
+            </Card>
+        </div>
     );
 };
 
@@ -1233,6 +1276,7 @@ export default function App() {
     const handleLogCreatine = async () => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/creatineLog`), { date: Timestamp.now() }); };
     const handleSaveWorkout = async (workoutData) => { if (!firebaseServices || !user) return; const workoutLog = { date: new Date().toISOString(), exercises: workoutData }; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`), workoutLog); };
     const handleUpdateWorkoutLog = async (logId, newData) => { if (!firebaseServices || !user || !logId) return; const logDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`, logId); const { id, ...dataToSave } = newData; await updateDoc(logDocRef, dataToSave); };
+    const handleDeleteWorkoutLog = async (logId) => { if (!firebaseServices || !user || !logId) return; const logDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`, logId); await deleteDoc(logDocRef); };
     const handleSetInProgressWorkout = async (workoutData) => { if (!firebaseServices || !user) return; const inProgressRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/inProgressWorkout/current`); await setDoc(inProgressRef, workoutData); };
     const handleClearInProgressWorkout = async () => { if (!firebaseServices || !user) return; const inProgressRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/inProgressWorkout/current`); await deleteDoc(inProgressRef); setView('dashboard'); };
     const handleAddMeasurements = async (measurements) => { if (!firebaseServices || !user) return; const measurementLog = { date: new Date().toISOString().slice(0, 10), ...measurements }; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/bodyMeasurements`), measurementLog); };
@@ -1251,7 +1295,7 @@ export default function App() {
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
-            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} />;
+            case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} handleDeleteWorkoutLog={handleDeleteWorkoutLog} />;
             case 'workout-creation': return <WorkoutCreationView userData={userData} setView={setView} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} />;
             case 'active-workout': return <ActiveWorkoutView userData={userData} handleGoBack={setView} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
@@ -1300,3 +1344,4 @@ export default function App() {
         </div>
     );
 }
+�
