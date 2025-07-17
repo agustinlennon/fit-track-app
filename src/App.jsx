@@ -703,7 +703,16 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
 
     const handleExerciseUpdate = (index, field, value) => { const updatedRoutine = [...routine]; updatedRoutine[index][field] = value; setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
     const handleToggleComplete = (index) => { const updatedRoutine = [...routine]; updatedRoutine[index].completed = !updatedRoutine[index].completed; setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
-    const handleDeleteExercise = (indexToDelete) => { const updatedRoutine = routine.filter((_, index) => index !== indexToDelete); setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
+    
+    const handleDeleteExercise = (indexToDelete) => {
+        const updatedRoutine = routine.filter((_, index) => index !== indexToDelete);
+        if (updatedRoutine.length === 0) {
+            handleClearInProgressWorkout();
+        } else {
+            setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine });
+        }
+    };
+
     const handleFinishAndSave = () => { handleSaveWorkout(routine); handleClearInProgressWorkout(); };
     
     const totalCaloriesBurned = useMemo(() => {
