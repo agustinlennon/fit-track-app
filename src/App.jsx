@@ -805,9 +805,10 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [editingWorkout, setEditingWorkout] = useState(null);
 
+    const DEPORTES_KEYWORDS = ['natación', 'futbol', 'tenis', 'correr', 'cinta', 'bicicleta', 'yoga', 'crossfit', 'estiramientos', 'pliometria'];
     const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
     const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
-    const CARDIO_KEYWORDS = ['cardio', 'natacion', 'futbol', 'correr', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
+    const CARDIO_KEYWORDS = ['cardio', 'skipping', 'jacks', 'trote', 'burpee'];
 
     const workoutsByDate = useMemo(() => {
         return (completedWorkouts || []).reduce((acc, workout) => {
@@ -833,6 +834,13 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
 
     const getWorkoutFocus = useCallback((exercises) => {
         if (!exercises || exercises.length === 0) return 'Descanso';
+
+        const firstExerciseName = (exercises[0].name || '').toLowerCase();
+        const sportKeyword = DEPORTES_KEYWORDS.find(sport => firstExerciseName.includes(sport));
+        if (sportKeyword) {
+            return sportKeyword.charAt(0).toUpperCase() + sportKeyword.slice(1);
+        }
+
         const counts = { superior: 0, inferior: 0, cardio: 0, otro: 0 };
         exercises.forEach(ex => {
             const muscle = (ex.muscleGroup || '').toLowerCase();
@@ -850,7 +858,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
         if (counts.superior > 0) return 'Tren Superior';
         if (counts.inferior > 0) return 'Tren Inferior';
         return 'General';
-    }, [TREN_SUPERIOR_MUSCLES, TREN_INFERIOR_MUSCLES, CARDIO_KEYWORDS]);
+    }, []);
     
     const getWorkoutIntensity = (exercises) => {
         if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
@@ -862,12 +870,15 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
 
     const getFocusVisuals = (focus) => {
         const normalizedFocus = focus.toLowerCase();
+        if (DEPORTES_KEYWORDS.includes(normalizedFocus)) {
+            return { color: 'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200', icon: <Zap size={14} className="text-purple-500"/> };
+        }
         switch (normalizedFocus) {
-            case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 border-blue-400', icon: <TrendingUp size={16} className="text-blue-500"/> };
-            case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 border-green-400', icon: <TrendingUp size={16} className="text-green-500"/> };
-            case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 border-orange-400', icon: <Activity size={16} className="text-orange-500"/> };
-            case 'full body': return { color: 'bg-purple-100 dark:bg-purple-900/50 border-purple-400', icon: <Dumbbell size={16} className="text-purple-500"/> };
-            default: return { color: 'bg-gray-100 dark:bg-gray-700/50 border-gray-400', icon: <Dumbbell size={16} className="text-gray-500"/> };
+            case 'tren superior': return { color: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200', icon: <TrendingUp size={14} className="text-blue-500"/> };
+            case 'tren inferior': return { color: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200', icon: <TrendingUp size={14} className="text-green-500"/> };
+            case 'cardio': return { color: 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200', icon: <Activity size={14} className="text-orange-500"/> };
+            case 'full body': return { color: 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200', icon: <Dumbbell size={14} className="text-indigo-500"/> };
+            default: return { color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-800 dark:text-gray-200', icon: <Dumbbell size={14} className="text-gray-500"/> };
         }
     };
 
@@ -901,22 +912,29 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
                         const dateKey = day.toISOString().slice(0, 10);
                         const workoutsForDay = workoutsByDate[dateKey];
                         const isToday = new Date().toISOString().slice(0, 10) === dateKey;
-                        if (workoutsForDay) {
-                            const focus = getWorkoutFocus(workoutsForDay[0].exercises);
-                            const intensity = getWorkoutIntensity(workoutsForDay[0].exercises);
-                            const visuals = getFocusVisuals(focus);
-                            return (
-                                <div key={dateKey} onClick={() => handleDayClick(day)} className={`w-full h-24 sm:h-32 p-2 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 ${visuals.color}`}>
-                                    <div className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div>
-                                    <div className="text-left mt-1">
-                                        <p className="text-xs sm:text-sm font-semibold truncate">{focus}</p>
-                                        <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">{visuals.icon}<span>{workoutsForDay[0].exercises.length} Ejer.</span></div>
-                                        <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300"><span>{intensity.icon}</span></div>
+                        return (
+                            <div 
+                                key={dateKey} 
+                                onClick={() => workoutsForDay && handleDayClick(day)} 
+                                className={`w-full h-24 sm:h-32 p-1 sm:p-2 rounded-lg transition-all duration-200 ${workoutsForDay ? 'bg-gray-100 dark:bg-gray-900/50 cursor-pointer hover:shadow-lg hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-gray-50 dark:bg-gray-800/50'}`}
+                            >
+                                <div className={`font-bold text-sm ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div>
+                                {workoutsForDay && (
+                                    <div className="mt-1 space-y-1">
+                                        {workoutsForDay.map((workout, workoutIndex) => {
+                                            const focus = getWorkoutFocus(workout.exercises);
+                                            const visuals = getFocusVisuals(focus);
+                                            return (
+                                                <div key={workout.id || workoutIndex} className={`flex items-center gap-1 text-xs font-semibold p-1 rounded ${visuals.color}`}>
+                                                    {visuals.icon}
+                                                    <span className="truncate hidden sm:inline">{focus}</span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                </div>
-                            );
-                        }
-                        return (<div key={dateKey} className="w-full h-24 sm:h-32 p-2 rounded-lg bg-gray-100 dark:bg-gray-800"><div className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div></div>);
+                                )}
+                            </div>
+                        );
                     })}
                 </div>
             </Card>
@@ -929,26 +947,33 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
 const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, getWorkoutFocus }) => {
     if (!isOpen || !workoutData) return null;
     const { date, workouts } = workoutData;
-    const workout = workouts[0];
-    const focus = getWorkoutFocus(workout.exercises);
+    
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`🗓️ ${date.toLocaleDateString('es-ES', { dateStyle: 'full' })}`}>
-            <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h4 className="font-bold text-lg text-gray-800 dark:text-white">Detalles del Entrenamiento</h4>
-                        <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">Foco: {focus}</p>
-                    </div>
-                    <Button onClick={() => onEdit(workout)} variant="secondary" className="px-3 py-1 text-sm"><Edit size={16}/> Editar</Button>
-                </div>
-                <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                    {workout.exercises.map((ex, index) => (
-                        <li key={index} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-                            <p className="font-bold text-blue-600 dark:text-blue-400">{ex.name}</p>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">{ex.sets} series de {ex.reps} reps con <span className="font-semibold">{ex.weight}</span></p>
-                        </li>
-                    ))}
-                </ul>
+            <div className="space-y-6">
+                {workouts.map((workout, index) => {
+                    const focus = getWorkoutFocus(workout.exercises);
+                    const workoutTime = new Date(workout.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    return (
+                        <div key={workout.id || index} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 pb-4 last:pb-0">
+                            <div className="flex justify-between items-center mb-2">
+                                <div>
+                                    <h4 className="font-bold text-lg text-gray-800 dark:text-white">Rutina de las {workoutTime}</h4>
+                                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">Foco: {focus}</p>
+                                </div>
+                                <Button onClick={() => onEdit(workout)} variant="secondary" className="px-3 py-1 text-sm"><Edit size={16}/> Editar</Button>
+                            </div>
+                            <ul className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                                {workout.exercises.map((ex, exIndex) => (
+                                    <li key={exIndex} className="p-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+                                        <p className="font-bold text-blue-600 dark:text-blue-400">{ex.name}</p>
+                                        <p className="text-sm text-gray-700 dark:text-gray-300">{ex.sets} series de {ex.reps} reps con <span className="font-semibold">{ex.weight}</span></p>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    );
+                })}
             </div>
         </Modal>
     );
