@@ -693,6 +693,14 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
     const [restTime, setRestTime] = useState(90);
     const [recalculatingIndex, setRecalculatingIndex] = useState(null);
 
+    // **BUG FIX**: Automatically clear workout if it's empty
+    useEffect(() => {
+        if (inProgressWorkout && (!inProgressWorkout.exercises || inProgressWorkout.exercises.length === 0)) {
+            console.log("Stuck workout state detected. Clearing...");
+            handleClearInProgressWorkout();
+        }
+    }, [inProgressWorkout, handleClearInProgressWorkout]);
+
     const routine = inProgressWorkout ? inProgressWorkout.exercises : [];
 
     const handleRecalculateCalories = async (exerciseIndex) => {
