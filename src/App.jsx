@@ -12,6 +12,8 @@ const normalizeString = (str) => {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+const TIMEZONE = 'America/Argentina/Buenos_Aires';
+
 const DEPORTES_KEYWORDS = ['natación', 'futbol', 'tenis', 'crossfit'];
 const FLEXIBILIDAD_KEYWORDS = ['yoga', 'estiramientos', 'flexibilidad', 'movilidad'];
 const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
@@ -216,12 +218,12 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   const [activityChartView, setActivityChartView] = useState('volume');
   const [creatineStatus, setCreatineStatus] = useState('idle');
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE }); // YYYY-MM-DD format
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
   const getDayPlan = (date) => {
-    const dayName = normalizeString(date.toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase());
+    const dayName = normalizeString(date.toLocaleDateString('es-ES', { weekday: 'long', timeZone: TIMEZONE }).toLowerCase());
     const plan = userData?.workoutSchedule?.[dayName] || [];
     return Array.isArray(plan) && plan.length > 0 ? plan : [{ name: 'Descanso', time: '' }];
   };
@@ -236,7 +238,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         const weather = "Día fresco de invierno, 12°C.";
         const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
         const planText = todaysPlan.map(p => p.name).join(' y ');
-        const prompt = `Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}. Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full' })}: - **Mi objetivo principal:** ${objectivePrompt}. - **Mi plan para hoy (${todaysPlan[0].name}) es:** ${planText}. - **El clima de hoy:** ${weather}. Basado en esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos: - Una sugerencia rápida para la comida pre y post entrenamiento. - Un consejo clave sobre hidratación o suplementación relevante para hoy. - Finaliza con una frase motivadora.`;
+        const prompt = `Actúa como mi entrenador personal y nutricionista, con un tono amigable y motivador. Mi nombre es ${userData.name}. Aquí está mi contexto para hoy, ${todayDate.toLocaleDateString('es-ES', { dateStyle: 'full', timeZone: TIMEZONE })}: - **Mi objetivo principal:** ${objectivePrompt}. - **Mi plan para hoy (${todaysPlan[0].name}) es:** ${planText}. - **El clima de hoy:** ${weather}. Basado en esto, dame un informe breve y conciso para mi día. **No uses numeración ni listados.** Integra naturalmente los siguientes puntos en uno o dos párrafos: - Una sugerencia rápida para la comida pre y post entrenamiento. - Un consejo clave sobre hidratación o suplementación relevante para hoy. - Finaliza con una frase motivadora.`;
         const recommendationText = await callGeminiAPI(prompt);
         setAiRecommendation({ text: recommendationText, loading: false });
     } catch (error) {
@@ -269,7 +271,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   
  const activityChartData = useMemo(() => {
     const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
-    const formatShortDate = (date) => date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+    const formatShortDate = (date) => date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', timeZone: TIMEZONE });
     if (activityChartView === 'volume') {
         const dataByDate = filteredData.reduce((acc, workout) => {
             if (!workout.date || typeof workout.date !== 'string') return acc;
@@ -473,9 +475,9 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-xl text-gray-800 dark:text-white">Historial de Creatina</h3>
             <div className="flex gap-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
-                <button onClick={() => setCreatineTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
-                <button onClick={() => setCreatineTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
-                <button onClick={() => setCreatineTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
+                <button onClick={() => setCreatineTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
+                <button onClick={() => setCreatineTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
+                <button onClick={() => setCreatineTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
             </div>
         </div>
         <div className="h-60">
@@ -483,9 +485,18 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
                 <ResponsiveContainer width="100%" height="100%">
                     <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                        <XAxis type="number" dataKey="x" name="date" domain={['dataMin', 'dataMax']} scale="time" tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })} fontSize={12}/>
-                        <YAxis type="number" dataKey="y" name="time" domain={[0, 1440]} reversed={true} tickCount={5} tickFormatter={(minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`} fontSize={12}/>
-                        <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} formatter={(value, name, props) => { const date = new Date(props.payload.x); const timeZone = 'America/Argentina/Buenos_Aires'; if (name === 'time') { return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone }); } return date.toLocaleDateString('es-AR', { timeZone }); }} labelFormatter={(label) => new Date(label).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}/>
+                        <XAxis type="number" dataKey="x" name="date" domain={['dataMin', 'dataMax']} scale="time" tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', timeZone: TIMEZONE })} fontSize={12}/>
+                        <YAxis
+                            type="number"
+                            dataKey="y"
+                            name="time"
+                            domain={[0, 1440]}
+                            reversed={false} 
+                            tickCount={5}
+                            tickFormatter={(minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`}
+                            fontSize={12}
+                        />
+                        <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} formatter={(value, name, props) => { const date = new Date(props.payload.x); if (name === 'time') { return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE }); } return date.toLocaleDateString('es-AR', { timeZone: TIMEZONE }); }} labelFormatter={(label) => new Date(label).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: TIMEZONE })}/>
                         <Scatter name="Toma de Creatina" data={creatineChartData} fill="#8884d8" />
                     </ScatterChart>
                 </ResponsiveContainer>
@@ -497,7 +508,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
 };
 
 const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const todaysLog = { loggedFoods: [], ...(dailyLog[today] || {}) };
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedMeal, setSelectedMeal] = useState('desayuno');
@@ -824,7 +835,23 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
     const [editedWorkout, setEditedWorkout] = useState(workout);
     useEffect(() => { setEditedWorkout(workout); }, [workout]);
     if (!editedWorkout) { return null; }
-    const handleDateChange = (e) => { setEditedWorkout(prev => ({ ...prev, date: new Date(e.target.value).toISOString() })); };
+
+    const getLocalISOString = (isoString) => {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
+    const handleDateChange = (e) => {
+        const localDate = new Date(e.target.value);
+        setEditedWorkout(prev => ({ ...prev, date: localDate.toISOString() }));
+    };
+
     const handleExerciseChange = (index, field, value) => { const newExercises = [...editedWorkout.exercises]; newExercises[index] = { ...newExercises[index], [field]: value }; setEditedWorkout(prev => ({ ...prev, exercises: newExercises })); };
     const addExercise = () => { const newExercise = { name: '', sets: '3', reps: '10', weight: '0', completed: false }; setEditedWorkout(prev => ({ ...prev, exercises: [...(prev.exercises || []), newExercise] })); };
     const deleteExercise = (index) => { const newExercises = editedWorkout.exercises.filter((_, i) => i !== index); setEditedWorkout(prev => ({ ...prev, exercises: newExercises })); };
@@ -832,7 +859,7 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
     return (
         <Modal isOpen={!!workout} onClose={onClose} title="Editar Entrenamiento">
             <div className="space-y-4">
-                <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha del Entrenamiento</label><input type="datetime-local" value={editedWorkout.date.slice(0, 16)} onChange={handleDateChange} className={inputClasses}/></div>
+                <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha del Entrenamiento</label><input type="datetime-local" value={getLocalISOString(editedWorkout.date)} onChange={handleDateChange} className={inputClasses}/></div>
                 <h4 className="font-bold text-lg mt-4 border-b border-gray-200 dark:border-gray-700 pb-2">Ejercicios</h4>
                 <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
                     {(editedWorkout.exercises || []).map((ex, index) => (
@@ -859,7 +886,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
 
     const workoutsByDate = useMemo(() => {
         return (completedWorkouts || []).reduce((acc, workout) => {
-            const dateKey = new Date(workout.date).toISOString().slice(0, 10);
+            const dateKey = new Date(workout.date).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
             if (!acc[dateKey]) { acc[dateKey] = []; }
             acc[dateKey].push(workout);
             return acc;
@@ -888,7 +915,7 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
     };
     
     const handleDayClick = (day) => {
-        const dateKey = day.toISOString().slice(0, 10);
+        const dateKey = day.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
         const workoutsForDay = workoutsByDate[dateKey];
         if (workoutsForDay) { setSelectedWorkout({ date: day, workouts: workoutsForDay }); setIsDetailModalOpen(true); }
     };
@@ -920,16 +947,16 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
             <Card>
                 <div className="flex justify-between items-center mb-4">
                     <Button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} variant="secondary"><ChevronLeft size={20} /></Button>
-                    <h3 className="text-xl font-bold capitalize">{currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</h3>
+                    <h3 className="text-xl font-bold capitalize">{currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric', timeZone: TIMEZONE })}</h3>
                     <Button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} variant="secondary"><ChevronRight size={20} /></Button>
                 </div>
                 <div className="grid grid-cols-7 gap-1 text-center font-semibold text-gray-500 dark:text-gray-400 mb-2">{weekDays.map(day => <div key={day}>{day}</div>)}</div>
                 <div className="grid grid-cols-7 gap-1">
                     {calendarDays.map((day, index) => {
                         if (!day) return <div key={`empty-${index}`} className="w-full h-24 sm:h-32 rounded-lg bg-gray-50 dark:bg-gray-800/50"></div>;
-                        const dateKey = day.toISOString().slice(0, 10);
+                        const dateKey = day.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
                         const workoutsForDay = workoutsByDate[dateKey];
-                        const isToday = new Date().toISOString().slice(0, 10) === dateKey;
+                        const isToday = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE }) === dateKey;
                         return (
                             <div key={dateKey} onClick={() => workoutsForDay && handleDayClick(day)} className={`w-full h-24 sm:h-32 p-1 sm:p-2 rounded-lg transition-all duration-200 ${workoutsForDay ? 'bg-gray-100 dark:bg-gray-900/50 cursor-pointer hover:shadow-lg hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
                                 <div className={`font-bold text-sm ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>{day.getDate()}</div>
@@ -970,11 +997,11 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, onDelete }) 
     const { date, workouts } = workoutData;
     
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`🗓️ ${date.toLocaleDateString('es-ES', { dateStyle: 'full' })}`}>
+        <Modal isOpen={isOpen} onClose={onClose} title={`🗓️ ${date.toLocaleDateString('es-ES', { dateStyle: 'full', timeZone: TIMEZONE })}`}>
             <div className="space-y-6">
                 {workouts.map((workout, index) => {
                     const focus = getWorkoutFocus(workout.exercises);
-                    const workoutTime = new Date(workout.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    const workoutTime = new Date(workout.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE });
                     return (
                         <div key={workout.id || index} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 pb-4 last:pb-0">
                             <div className="flex justify-between items-center mb-2">
@@ -1270,7 +1297,7 @@ export default function App() {
     const handleUpdateSchedule = async (newSchedule) => { if (!firebaseServices || !user) return; try { const userDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`); await setDoc(userDocRef, { workoutSchedule: newSchedule }, { merge: true }); } catch (error) { console.error("Error al guardar el plan semanal.", error); throw error; } };
     const handleUpdateWorkoutOptions = async (newOptions) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/profile/data`), { workoutOptions: newOptions }, { merge: true }); };
     const handleLogFood = useCallback(async (date, data, merge = false) => { if (!firebaseServices || !user) return; await setDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/dailyLogs`, date), data, { merge: merge }); }, [firebaseServices, user]);
-    const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toISOString().slice(0, 10), weight }); };
+    const handleAddWeight = async (weight) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/weightHistory`), { date: new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE }), weight }); };
     const handleDeleteFood = async (foodId) => { if (!firebaseServices || !user) return; await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/foodDatabase`, foodId)); };
     const handleAddFood = async (foodData) => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/foodDatabase`), foodData); };
     const handleLogCreatine = async () => { if (!firebaseServices || !user) return; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/creatineLog`), { date: Timestamp.now() }); };
@@ -1279,8 +1306,29 @@ export default function App() {
     const handleDeleteWorkoutLog = async (logId) => { if (!firebaseServices || !user || !logId) return; const logDocRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/completedWorkouts`, logId); await deleteDoc(logDocRef); };
     const handleSetInProgressWorkout = async (workoutData) => { if (!firebaseServices || !user) return; const inProgressRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/inProgressWorkout/current`); await setDoc(inProgressRef, workoutData); };
     const handleClearInProgressWorkout = async () => { if (!firebaseServices || !user) return; const inProgressRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/inProgressWorkout/current`); await deleteDoc(inProgressRef); setView('dashboard'); };
-    const handleAddMeasurements = async (measurements) => { if (!firebaseServices || !user) return; const measurementLog = { date: new Date().toISOString().slice(0, 10), ...measurements }; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/bodyMeasurements`), measurementLog); };
-    const handleToggleFavorite = async (exercise) => { if (!firebaseServices || !user || !userData) return; const { db } = firebaseServices; const userDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`); const isFavorite = userData.favoriteExercises?.some(favEx => favEx.name === exercise.name); if (isFavorite) { const exerciseToRemove = userData.favoriteExercises.find(favEx => favEx.name === exercise.name); if (exerciseToRemove) { await updateDoc(userDocRef, { favoriteExercises: arrayRemove(exerciseToRemove) }); } } else { const { completed, ...exerciseToSave } = exercise; await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseToSave) }); } };
+    const handleAddMeasurements = async (measurements) => { if (!firebaseServices || !user) return; const measurementLog = { date: new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE }), ...measurements }; await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/bodyMeasurements`), measurementLog); };
+    const handleToggleFavorite = async (exercise) => {
+        if (!firebaseServices || !user) return;
+        const { db } = firebaseServices;
+        const userDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/profile/data`);
+        const isFavorite = userData?.favoriteExercises?.some(favEx => favEx.name === exercise.name);
+        
+        const docSnap = await getDoc(userDocRef);
+        if (!docSnap.exists()) {
+             await setDoc(userDocRef, { favoriteExercises: [exercise] });
+             return;
+        }
+
+        if (isFavorite) {
+            const exerciseToRemove = userData.favoriteExercises.find(favEx => favEx.name === exercise.name);
+            if (exerciseToRemove) {
+                await updateDoc(userDocRef, { favoriteExercises: arrayRemove(exerciseToRemove) });
+            }
+        } else {
+            const { completed, ...exerciseToSave } = exercise;
+            await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseToSave) });
+        }
+    };
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
@@ -1329,7 +1377,7 @@ export default function App() {
                      <div className="sm:hidden flex flex-row items-center gap-2 overflow-x-auto flex-nowrap h-full px-2">
                          <NavItem icon={BarChart2} label="Dashboard" viewName="dashboard" />
                          <NavItem icon={Zap} label="Entrenar" viewName="workout-creation" />
-                         <NavItem icon={Bot} label="Chat" viewName="ai-chat" />
+                         <NavItem icon={Bot} label="Chat con IA" viewName="ai-chat" />
                          <NavItem icon={Calendar} label="Plan" viewName="workout" />
                          <NavItem icon={History} label="Historial" viewName="history" />
                          <NavItem icon={User} label="Progreso" viewName="progress" />
