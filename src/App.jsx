@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle, Bike, Waves } from 'lucide-react';
 
 
 // --- FUNCIONES AUXILIARES Y DE LÓGICA COMPARTIDA ---
@@ -14,29 +14,62 @@ const normalizeString = (str) => {
 
 const TIMEZONE = 'America/Argentina/Buenos_Aires';
 
-const DEPORTES_KEYWORDS = ['natación', 'futbol', 'tenis', 'crossfit'];
-const FLEXIBILIDAD_KEYWORDS = ['yoga', 'estiramientos', 'flexibilidad', 'movilidad'];
-const TREN_SUPERIOR_MUSCLES = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
-const TREN_INFERIOR_MUSCLES = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
-const CARDIO_KEYWORDS = ['cardio', 'correr', 'cinta', 'bicicleta', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
+// --- NUEVO: SISTEMA DE CLASIFICACIÓN DE EJERCICIOS ---
+const EXERCISE_TYPES = {
+    STRENGTH: 'strength',
+    CARDIO_DISTANCE: 'cardio_distance', // Correr, nadar, bici
+    CARDIO_DURATION: 'cardio_duration', // Yoga, elíptica, HIIT
+    SPORT: 'sport', // Futbol, Tenis
+};
+
+const CARDIO_DISTANCE_KEYWORDS = ['natacion', 'nadar', 'correr', 'cinta', 'trote', 'bicicleta', 'bici', 'ciclismo', 'remar', 'remo'];
+const CARDIO_DURATION_KEYWORDS = ['yoga', 'estiramientos', 'flexibilidad', 'movilidad', 'eliptica', 'hiit', 'cardio general', 'skipping', 'jacks', 'burpee'];
+const SPORT_KEYWORDS = ['futbol', 'tenis', 'crossfit', 'deportes', 'baloncesto', 'boxeo'];
+const STRENGTH_MUSCLE_GROUPS = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos', 'piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core', 'abdominales'];
+
+/**
+ * Clasifica un ejercicio basado en su nombre y grupo muscular.
+ * @param {string} exerciseName - El nombre del ejercicio.
+ * @param {string} muscleGroup - El grupo muscular (opcional).
+ * @returns {string} - El tipo de ejercicio (ej: 'strength', 'cardio_distance').
+ */
+const getExerciseType = (exerciseName, muscleGroup = '') => {
+    const name = normalizeString((exerciseName || '').toLowerCase());
+    const muscle = normalizeString((muscleGroup || '').toLowerCase());
+
+    if (CARDIO_DISTANCE_KEYWORDS.some(k => name.includes(k))) return EXERCISE_TYPES.CARDIO_DISTANCE;
+    if (SPORT_KEYWORDS.some(k => name.includes(k))) return EXERCISE_TYPES.SPORT;
+    if (CARDIO_DURATION_KEYWORDS.some(k => name.includes(k))) return EXERCISE_TYPES.CARDIO_DURATION;
+    if (STRENGTH_MUSCLE_GROUPS.some(m => name.includes(m) || muscle.includes(m))) return EXERCISE_TYPES.STRENGTH;
+    
+    // Si no se reconoce, se asume que es de fuerza como fallback seguro.
+    return EXERCISE_TYPES.STRENGTH;
+};
+
 
 const getWorkoutFocus = (exercises) => {
     if (!exercises || exercises.length === 0) return 'Descanso';
     const firstExerciseName = (exercises[0].name || '').toLowerCase();
     
-    const sportKeyword = DEPORTES_KEYWORDS.find(sport => firstExerciseName.includes(sport));
+    const DEPORTES_KEYWORDS_FOCUS = ['natación', 'futbol', 'tenis', 'crossfit'];
+    const sportKeyword = DEPORTES_KEYWORDS_FOCUS.find(sport => firstExerciseName.includes(sport));
     if (sportKeyword) return "Deportes";
 
-    const flexKeyword = FLEXIBILIDAD_KEYWORDS.find(flex => firstExerciseName.includes(flex));
+    const FLEXIBILIDAD_KEYWORDS_FOCUS = ['yoga', 'estiramientos', 'flexibilidad', 'movilidad'];
+    const flexKeyword = FLEXIBILIDAD_KEYWORDS_FOCUS.find(flex => firstExerciseName.includes(flex));
     if (flexKeyword) return "Flexibilidad";
 
     const counts = { superior: 0, inferior: 0, cardio: 0 };
+    const TREN_SUPERIOR_MUSCLES_FOCUS = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos'];
+    const TREN_INFERIOR_MUSCLES_FOCUS = ['piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core'];
+    const CARDIO_KEYWORDS_FOCUS = ['cardio', 'correr', 'cinta', 'bicicleta', 'skipping', 'jacks', 'trote', 'burpee', 'pliometria'];
+
     exercises.forEach(ex => {
         const muscle = (ex.muscleGroup || '').toLowerCase();
         const name = (ex.name || '').toLowerCase();
-        if (TREN_SUPERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.superior++; } 
-        else if (TREN_INFERIOR_MUSCLES.some(m => muscle.includes(m))) { counts.inferior++; } 
-        else if (CARDIO_KEYWORDS.some(k => muscle.includes(k) || name.includes(k))) { counts.cardio++; }
+        if (TREN_SUPERIOR_MUSCLES_FOCUS.some(m => muscle.includes(m))) { counts.superior++; } 
+        else if (TREN_INFERIOR_MUSCLES_FOCUS.some(m => muscle.includes(m))) { counts.inferior++; } 
+        else if (CARDIO_KEYWORDS_FOCUS.some(k => muscle.includes(k) || name.includes(k))) { counts.cardio++; }
     });
     const totalExercises = exercises.length;
     if (counts.cardio / totalExercises >= 0.5) return 'Cardio';
@@ -47,6 +80,7 @@ const getWorkoutFocus = (exercises) => {
     if (counts.inferior > 0) return 'Tren Inferior';
     return 'General';
 };
+
 
 const getFocusVisuals = (focus, size = 14) => {
     const normalizedFocus = (focus || '').toLowerCase();
@@ -222,19 +256,19 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  const getDayPlan = (date) => {
-    const dayName = normalizeString(date.toLocaleDateString('es-ES', { weekday: 'long', timeZone: TIMEZONE }).toLowerCase());
+  // --- CORRECCIÓN: Usar useMemo para asegurar que el plan del día se recalcule cuando cambie el schedule ---
+  const todaysPlan = useMemo(() => {
+    const todayDate = new Date();
+    const dayName = normalizeString(todayDate.toLocaleDateString('es-ES', { weekday: 'long', timeZone: TIMEZONE }).toLowerCase());
     const plan = userData?.workoutSchedule?.[dayName] || [];
     return Array.isArray(plan) && plan.length > 0 ? plan : [{ name: 'Descanso', time: '' }];
-  };
-
-  const todayDate = new Date();
-  const todaysPlan = getDayPlan(todayDate);
+  }, [userData?.workoutSchedule]); // Dependencia explícita en el workoutSchedule
 
   const getAiRecommendation = async () => {
     if (!userData) return;
     setAiRecommendation({ text: 'Analizando tu día...', loading: true });
     try {
+        const todayDate = new Date();
         const weather = "Día fresco de invierno, 12°C.";
         const objectivePrompt = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
         const planText = todaysPlan.map(p => p.name).join(' y ');
@@ -264,9 +298,15 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
 
   const workoutSummary = useMemo(() => {
     const totalWorkouts = filteredData.length;
-    const totalSets = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
-    const totalReps = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (parseInt(ex.reps, 10) || 0) * (parseInt(ex.sets, 10) || 0), 0) : 0), 0);
-    return { totalWorkouts, totalSets, totalReps };
+    const totalSets = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (ex.type === EXERCISE_TYPES.STRENGTH ? parseInt(ex.metrics?.sets, 10) || 0 : 0), 0) : 0), 0);
+    const totalDuration = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => {
+        if (ex.type !== EXERCISE_TYPES.STRENGTH && ex.metrics?.duration) {
+            const timeParts = ex.metrics.duration.match(/\d+/g);
+            if (timeParts) return exAcc + parseInt(timeParts[0], 10);
+        }
+        return exAcc;
+    }, 0) : 0), 0);
+    return { totalWorkouts, totalSets, totalDuration };
   }, [filteredData]);
   
  const activityChartData = useMemo(() => {
@@ -281,7 +321,11 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
             if (!acc[dateKey]) {
                 acc[dateKey] = { series: 0, dateObj: dateObj };
             }
-            (workout.exercises || []).forEach(ex => { acc[dateKey].series += parseInt(ex.sets, 10) || 0; });
+            (workout.exercises || []).forEach(ex => { 
+                if (ex.type === EXERCISE_TYPES.STRENGTH) {
+                    acc[dateKey].series += parseInt(ex.metrics?.sets, 10) || 0; 
+                }
+            });
             return acc;
         }, {});
         return Object.values(dataByDate).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime()).map((data) => ({ name: formatShortDate(data.dateObj), series: data.series }));
@@ -291,7 +335,11 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
             (workout.exercises || []).forEach(ex => {
                 const muscle = ex.muscleGroup || 'Otro';
                 if (!acc[muscle]) { acc[muscle] = 0; }
-                acc[muscle] += parseInt(ex.sets, 10) || 0;
+                if (ex.type === EXERCISE_TYPES.STRENGTH) {
+                    acc[muscle] += parseInt(ex.metrics?.sets, 10) || 0;
+                } else {
+                    acc[muscle] += 1; // Count non-strength activities as one unit
+                }
             });
             return acc;
         }, {});
@@ -422,7 +470,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         <div className="grid grid-cols-3 gap-4 text-center mb-6">
             <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalWorkouts}</p><p className="text-xs text-gray-500 dark:text-gray-400">Entrenos</p></div>
             <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalSets}</p><p className="text-xs text-gray-500 dark:text-gray-400">Series</p></div>
-            <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalReps}</p><p className="text-xs text-gray-500 dark:text-gray-400">Reps</p></div>
+            <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalDuration}</p><p className="text-xs text-gray-500 dark:text-gray-400">Minutos Cardio</p></div>
         </div>
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
             <div className="flex justify-center gap-2 mb-4">
@@ -475,9 +523,9 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-xl text-gray-800 dark:text-white">Historial de Creatina</h3>
             <div className="flex gap-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
-                <button onClick={() => setCreatineTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
-                <button onClick={() => setCreatineTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
-                <button onClick={() => setCreatineTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${timeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
+                <button onClick={() => setCreatineTimeFilter('week')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'week' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Semana</button>
+                <button onClick={() => setCreatineTimeFilter('month')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'month' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Mes</button>
+                <button onClick={() => setCreatineTimeFilter('year')} className={`px-2 py-1 text-xs rounded-md ${creatineTimeFilter === 'year' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>Año</button>
             </div>
         </div>
         <div className="h-60">
@@ -752,9 +800,9 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     );
 };
 
+// --- VISTA DE RUTINA ACTIVA (MODIFICADA) ---
 const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgressWorkout, setInProgressWorkout, handleToggleFavorite, handleClearInProgressWorkout }) => {
     const [restTime, setRestTime] = useState(90);
-    const [recalculatingIndex, setRecalculatingIndex] = useState(null);
 
     useEffect(() => {
         if (inProgressWorkout && (!inProgressWorkout.exercises || inProgressWorkout.exercises.length === 0)) {
@@ -765,13 +813,20 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
 
     const routine = inProgressWorkout ? inProgressWorkout.exercises : [];
 
-    const handleRecalculateCalories = async (exerciseIndex) => {
-        setRecalculatingIndex(exerciseIndex); const exercise = routine[exerciseIndex];
-        const prompt = `Por favor, recalcula las calorías quemadas para el siguiente ejercicio basado en los nuevos datos: - Ejercicio: ${exercise.name} - Series: ${exercise.sets} - Repeticiones: ${exercise.reps} - Peso: ${exercise.weight} Responde únicamente con el nuevo valor de calorías quemadas (ej: "60-80 kcal").`;
-        try { const newCalories = await callGeminiAPI(prompt); const updatedRoutine = [...routine]; updatedRoutine[exerciseIndex].caloriesBurned = newCalories.trim(); setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); } catch (error) { console.error("Error recalculating calories:", error); } finally { setRecalculatingIndex(null); }
+    const handleMetricUpdate = (index, metricName, value) => {
+        const updatedRoutine = [...routine];
+        const updatedExercise = { ...updatedRoutine[index] };
+        
+        // Ensure metrics object exists
+        if (!updatedExercise.metrics) {
+            updatedExercise.metrics = {};
+        }
+
+        updatedExercise.metrics[metricName] = value;
+        updatedRoutine[index] = updatedExercise;
+        setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine });
     };
 
-    const handleExerciseUpdate = (index, field, value) => { const updatedRoutine = [...routine]; updatedRoutine[index][field] = value; setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
     const handleToggleComplete = (index) => { const updatedRoutine = [...routine]; updatedRoutine[index].completed = !updatedRoutine[index].completed; setInProgressWorkout({ ...inProgressWorkout, exercises: updatedRoutine }); };
     
     const handleDeleteExercise = (indexToDelete) => {
@@ -796,7 +851,65 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
         }, 0) : 0;
     }, [routine]);
 
-    const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
+    // --- NUEVO: Componente para renderizar métricas dinámicamente ---
+    const RenderExerciseMetrics = ({ exercise, index }) => {
+        const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
+        const metrics = exercise.metrics || {};
+
+        switch (exercise.type) {
+            case EXERCISE_TYPES.STRENGTH:
+                return (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+                        <div><label className="text-xs font-medium">Series</label><input type="text" value={metrics.sets || ''} onChange={(e) => handleMetricUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div>
+                        <div><label className="text-xs font-medium">Reps</label><input type="text" value={metrics.reps || ''} onChange={(e) => handleMetricUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div>
+                        <div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={metrics.weight || ''} onChange={(e) => handleMetricUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div>
+                    </div>
+                );
+            case EXERCISE_TYPES.CARDIO_DISTANCE:
+                return (
+                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+                        <div><label className="text-xs font-medium">Distancia</label><input type="text" value={metrics.distance || ''} onChange={(e) => handleMetricUpdate(index, 'distance', e.target.value)} placeholder="ej: 5 km" className={inputClasses} /></div>
+                        <div><label className="text-xs font-medium">Duración</label><input type="text" value={metrics.duration || ''} onChange={(e) => handleMetricUpdate(index, 'duration', e.target.value)} placeholder="ej: 25:00" className={inputClasses} /></div>
+                        <div><label className="text-xs font-medium">Velocidad Prom.</label><input type="text" value={metrics.avgSpeed || ''} onChange={(e) => handleMetricUpdate(index, 'avgSpeed', e.target.value)} placeholder="ej: 12 km/h" className={inputClasses} /></div>
+                    </div>
+                );
+            case EXERCISE_TYPES.CARDIO_DURATION:
+            case EXERCISE_TYPES.SPORT:
+                 return (
+                     <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div><label className="text-xs font-medium">Duración</label><input type="text" value={metrics.duration || ''} onChange={(e) => handleMetricUpdate(index, 'duration', e.target.value)} placeholder="ej: 45 min" className={inputClasses} /></div>
+                        <div><label className="text-xs font-medium">Intensidad</label><input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="ej: Moderada" className={inputClasses} /></div>
+                    </div>
+                );
+            default:
+                // Fallback por si el tipo no es reconocido, muestra los campos de fuerza por defecto
+                return (
+                    <div className="p-2 my-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
+                        <p className="text-xs text-yellow-800 dark:text-yellow-200">Tipo de ejercicio no reconocido. Mostrando campos por defecto.</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
+                            <div><label className="text-xs font-medium">Series</label><input type="text" value={metrics.sets || ''} onChange={(e) => handleMetricUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div>
+                            <div><label className="text-xs font-medium">Reps</label><input type="text" value={metrics.reps || ''} onChange={(e) => handleMetricUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div>
+                            <div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={metrics.weight || ''} onChange={(e) => handleMetricUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div>
+                        </div>
+                    </div>
+                );
+        }
+    };
+
+    const getExerciseIcon = (type) => {
+        switch(type) {
+            case EXERCISE_TYPES.CARDIO_DISTANCE:
+                return <Footprints size={20} className="text-blue-500" />;
+            case EXERCISE_TYPES.CARDIO_DURATION:
+                return <HeartPulse size={20} className="text-orange-500" />;
+            case EXERCISE_TYPES.SPORT:
+                return <Trophy size={20} className="text-purple-500" />;
+            case EXERCISE_TYPES.STRENGTH:
+            default:
+                return <Dumbbell size={20} className="text-green-500" />;
+        }
+    }
+
 
     if (!inProgressWorkout || !Array.isArray(routine) || routine.length === 0) {
         return (
@@ -818,7 +931,19 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
                             <button onClick={() => handleToggleFavorite(exercise)} className="absolute top-2 left-2 text-gray-400 hover:text-yellow-400 transition-colors z-10" aria-label="Marcar como favorito"><Star size={20} className={isFavorite ? "text-yellow-400 fill-current" : ""} /></button>
                             <button onClick={() => handleDeleteExercise(index)} className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10" aria-label="Eliminar ejercicio"><X size={18} /></button>
                             <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-6">
-                                <div className="flex-1"><h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label className="text-xs font-medium">Series</label><input type="text" value={exercise.sets} onChange={(e) => handleExerciseUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Reps</label><input type="text" value={exercise.reps} onChange={(e) => handleExerciseUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={exercise.weight} onChange={(e) => handleExerciseUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div><div><label className="text-xs font-medium">Equipo</label><select value={exercise.equipment} onChange={(e) => handleExerciseUpdate(index, 'equipment', e.target.value)} className={inputClasses}><option>Mancuerna</option><option>Barra</option><option>Peso Corporal</option><option>Máquina</option></select></div></div><div className="mt-4 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300"><span className={`flex items-center gap-1 ${recalculatingIndex === index ? 'animate-pulse' : ''}`}><Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}</span><Button onClick={() => handleRecalculateCalories(index)} variant="secondary" className="px-2 py-1 text-xs" disabled={recalculatingIndex === index}><RotateCcw size={14}/>{recalculatingIndex === index ? '...' : 'Actualizar'}</Button></div></div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3">
+                                        {getExerciseIcon(exercise.type)}
+                                        <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400">{exercise.name}</h4>
+                                    </div>
+                                    
+                                    <RenderExerciseMetrics exercise={exercise} index={index} />
+                                    
+                                    <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                                        <span className="flex items-center gap-1"><Flame size={16} className="text-orange-500"/> {exercise.caloriesBurned}</span>
+                                        <span className="flex items-center gap-1"><Dumbbell size={16} className="text-gray-400"/> {exercise.equipment}</span>
+                                    </div>
+                                </div>
                                 <div className="w-full sm:w-auto flex flex-col gap-2 mt-2 sm:mt-0"><Button onClick={() => handleToggleComplete(index)} variant={exercise.completed ? 'secondary' : 'success'} className="w-full"><Check size={18} /> {exercise.completed ? 'Deshacer' : 'Terminado'}</Button><Button asLink={true} href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoSearchQuery)}`} variant="youtube" className="w-full"><Youtube size={18} /> Ver Video</Button></div>
                             </div>
                         </Card>
@@ -853,9 +978,29 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
     };
 
     const handleExerciseChange = (index, field, value) => { const newExercises = [...editedWorkout.exercises]; newExercises[index] = { ...newExercises[index], [field]: value }; setEditedWorkout(prev => ({ ...prev, exercises: newExercises })); };
-    const addExercise = () => { const newExercise = { name: '', sets: '3', reps: '10', weight: '0', completed: false }; setEditedWorkout(prev => ({ ...prev, exercises: [...(prev.exercises || []), newExercise] })); };
+    const handleMetricChange = (exIndex, metricName, value) => {
+        const newExercises = [...editedWorkout.exercises];
+        const newMetrics = {...newExercises[exIndex].metrics, [metricName]: value};
+        newExercises[exIndex] = {...newExercises[exIndex], metrics: newMetrics};
+        setEditedWorkout(prev => ({...prev, exercises: newExercises}));
+    };
+
+    const addExercise = () => { const newExercise = { name: '', type: EXERCISE_TYPES.STRENGTH, metrics: { sets: '3', reps: '10', weight: '0' }, completed: false }; setEditedWorkout(prev => ({ ...prev, exercises: [...(prev.exercises || []), newExercise] })); };
     const deleteExercise = (index) => { const newExercises = editedWorkout.exercises.filter((_, i) => i !== index); setEditedWorkout(prev => ({ ...prev, exercises: newExercises })); };
     const inputClasses = "w-full p-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm";
+    
+    const RenderEditMetrics = ({ ex, index }) => {
+        const metrics = ex.metrics || {};
+        switch(ex.type) {
+            case EXERCISE_TYPES.STRENGTH:
+                return <div className="grid grid-cols-3 gap-2"><input type="text" placeholder="Series" value={metrics.sets} onChange={e => handleMetricChange(index, 'sets', e.target.value)} className={inputClasses} /><input type="text" placeholder="Reps" value={metrics.reps} onChange={e => handleMetricChange(index, 'reps', e.target.value)} className={inputClasses} /><input type="text" placeholder="Peso" value={metrics.weight} onChange={e => handleMetricChange(index, 'weight', e.target.value)} className={inputClasses} /></div>;
+            case EXERCISE_TYPES.CARDIO_DISTANCE:
+                return <div className="grid grid-cols-2 gap-2"><input type="text" placeholder="Distancia" value={metrics.distance} onChange={e => handleMetricChange(index, 'distance', e.target.value)} className={inputClasses} /><input type="text" placeholder="Duración" value={metrics.duration} onChange={e => handleMetricChange(index, 'duration', e.target.value)} className={inputClasses} /></div>;
+            default:
+                return <div className="grid grid-cols-1 gap-2"><input type="text" placeholder="Duración" value={metrics.duration} onChange={e => handleMetricChange(index, 'duration', e.target.value)} className={inputClasses} /></div>;
+        }
+    };
+
     return (
         <Modal isOpen={!!workout} onClose={onClose} title="Editar Entrenamiento">
             <div className="space-y-4">
@@ -866,7 +1011,7 @@ const EditWorkoutModal = ({ workout, onClose, onSave }) => {
                         <div key={index} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg space-y-2 relative">
                              <button onClick={() => deleteExercise(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"><Trash2 size={16}/></button>
                             <input type="text" placeholder="Nombre del Ejercicio" value={ex.name} onChange={e => handleExerciseChange(index, 'name', e.target.value)} className={inputClasses} />
-                             <div className="grid grid-cols-3 gap-2"><input type="text" placeholder="Series" value={ex.sets} onChange={e => handleExerciseChange(index, 'sets', e.target.value)} className={inputClasses} /><input type="text" placeholder="Reps" value={ex.reps} onChange={e => handleExerciseChange(index, 'reps', e.target.value)} className={inputClasses} /><input type="text" placeholder="Peso" value={ex.weight} onChange={e => handleExerciseChange(index, 'weight', e.target.value)} className={inputClasses} /></div>
+                            <RenderEditMetrics ex={ex} index={index} />
                         </div>
                     ))}
                 </div>
@@ -905,14 +1050,6 @@ const HistoryTracker = ({ completedWorkouts, handleGoBack, handleUpdateWorkoutLo
         for (let i = 1; i <= daysInMonth; i++) { days.push(new Date(year, month, i)); }
         return days;
     }, [currentDate]);
-    
-    const getWorkoutIntensity = (exercises) => {
-        if (!exercises || exercises.length === 0) return { level: 'Ninguna', icon: '' };
-        const totalSets = exercises.reduce((sum, ex) => sum + (parseInt(ex.sets, 10) || 0), 0);
-        if (totalSets > 20) return { level: 'Intenso', icon: '🔥🔥🔥' };
-        if (totalSets > 12) return { level: 'Moderado', icon: '🔥🔥' };
-        return { level: 'Ligero', icon: '🔥' };
-    };
     
     const handleDayClick = (day) => {
         const dateKey = day.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
@@ -996,6 +1133,18 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, onDelete }) 
     if (!isOpen || !workoutData) return null;
     const { date, workouts } = workoutData;
     
+    const RenderDetailMetrics = ({ ex }) => {
+        const metrics = ex.metrics || {};
+        switch(ex.type) {
+            case EXERCISE_TYPES.STRENGTH:
+                return <p className="text-sm text-gray-700 dark:text-gray-300">{metrics.sets} series de {metrics.reps} reps con <span className="font-semibold">{metrics.weight}</span></p>;
+            case EXERCISE_TYPES.CARDIO_DISTANCE:
+                return <p className="text-sm text-gray-700 dark:text-gray-300">Dist: <span className="font-semibold">{metrics.distance}</span> | Dur: <span className="font-semibold">{metrics.duration}</span></p>;
+            default:
+                return <p className="text-sm text-gray-700 dark:text-gray-300">Duración: <span className="font-semibold">{metrics.duration}</span></p>;
+        }
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`🗓️ ${date.toLocaleDateString('es-ES', { dateStyle: 'full', timeZone: TIMEZONE })}`}>
             <div className="space-y-6">
@@ -1015,10 +1164,10 @@ const WorkoutDetailModal = ({ isOpen, onClose, workoutData, onEdit, onDelete }) 
                                 </div>
                             </div>
                             <ul className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                                {workout.exercises.map((ex, exIndex) => (
+                                {(workout.exercises || []).map((ex, exIndex) => (
                                     <li key={exIndex} className="p-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                                         <p className="font-bold text-blue-600 dark:text-blue-400">{ex.name}</p>
-                                        <p className="text-sm text-gray-700 dark:text-gray-300">{ex.sets} series de {ex.reps} reps con <span className="font-semibold">{ex.weight}</span></p>
+                                        <RenderDetailMetrics ex={ex} />
                                     </li>
                                 ))}
                             </ul>
@@ -1087,7 +1236,7 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
     );
 };
 
-// --- Nuevo componente unificado para la creación de rutinas ---
+// --- VISTA DE CREACIÓN DE RUTINA (MODIFICADA) ---
 const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleToggleFavorite }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -1120,14 +1269,80 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
         const favoriteExercisesText = Array.isArray(userData.favoriteExercises) && userData.favoriteExercises.length > 0 ? `Mis ejercicios favoritos son: ${userData.favoriteExercises.map(ex => ex.name).join(', ')}. Intenta incluirlos si son apropiados.` : '';
         const objectivePromptText = userData.objectivePrompt || 'Mis objetivos son ganar masa muscular y mantenerme saludable.';
-        const prompt = `Hola, soy ${userData.name}. ${objectivePromptText} Mi plan para hoy es: ${todayWorkoutText}. Sin embargo, para la sesión de hoy tengo estas notas específicas: "${userNotes || 'Ninguna'}". Por favor, prioriza mis notas si entran en conflicto con el plan del calendario. Por ejemplo, si el plan dice "Piernas" pero mis notas dicen "quiero enfocarme en hombros", genera una rutina de hombros. Mi nivel de energía hoy es: ${fatigueLevel}. Mi historial reciente es: ${historySummary || 'ninguno'}. ${favoriteExercisesText} Basado en toda esta información, y especialmente en mi historial para asegurar una buena rotación y evitar sobreentrenamiento, genera una rutina detallada para hoy. IMPORTANTE: Responde SIEMPRE en español. Para cada ejercicio, proporciona: name, sets, reps, weight, videoSearchQuery, estimatedDuration, difficultyLevel, equipment, caloriesBurned y muscleGroup (ej: "Pecho", "Espalda", "Piernas", "Brazos", "Hombros", "Core").`;
-        const generationConfig = { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { routine: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, sets: { type: "STRING" }, reps: { type: "STRING" }, weight: { type: "STRING" }, videoSearchQuery: { type: "STRING" }, estimatedDuration: { type: "STRING" }, difficultyLevel: { type: "STRING" }, equipment: { type: "STRING" }, caloriesBurned: { type: "STRING" }, muscleGroup: { type: "STRING" } }, required: ["name", "sets", "reps", "weight", "videoSearchQuery", "estimatedDuration", "difficultyLevel", "equipment", "caloriesBurned", "muscleGroup"] } } } } };
+        
+        const prompt = `Actúa como un entrenador personal experto. Mi nombre es ${userData.name}.
+        Contexto:
+        - Mi objetivo: ${objectivePromptText}
+        - Plan de hoy: ${todayWorkoutText}.
+        - Notas para hoy (¡muy importante!): "${userNotes || 'Ninguna'}". Si mis notas contradicen el plan, sigue mis notas.
+        - Mi energía hoy: ${fatigueLevel}.
+        - Mi historial reciente: ${historySummary || 'ninguno'}.
+        - Mis favoritos: ${favoriteExercisesText}.
+
+        Tarea: Genera una rutina detallada para hoy.
+        Formato de Respuesta (JSON estricto):
+        Para cada ejercicio, proporciona:
+        1. "name": Nombre del ejercicio.
+        2. "type": Clasifica el ejercicio. Usa UNO de: "${EXERCISE_TYPES.STRENGTH}", "${EXERCISE_TYPES.CARDIO_DISTANCE}", "${EXERCISE_TYPES.CARDIO_DURATION}", "${EXERCISE_TYPES.SPORT}".
+        3. "metrics": Un objeto con las métricas EXACTAS para ese tipo:
+           - Para "${EXERCISE_TYPES.STRENGTH}": { "sets": "...", "reps": "...", "weight": "..." }
+           - Para "${EXERCISE_TYPES.CARDIO_DISTANCE}": { "distance": "...", "duration": "...", "avgSpeed": "(opcional)" }
+           - Para "${EXERCISE_TYPES.CARDIO_DURATION}" o "${EXERCISE_TYPES.SPORT}": { "duration": "...", "intensity": "(opcional)" }
+        4. "videoSearchQuery": Búsqueda en YouTube.
+        5. "equipment": Equipo necesario.
+        6. "caloriesBurned": Estimación de kcal.
+        7. "muscleGroup": Grupo muscular principal.`;
+
+        // --- CORRECCIÓN: ESQUEMA JSON para la IA ---
+        const generationConfig = {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: "OBJECT",
+                properties: {
+                    routine: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                name: { type: "STRING" },
+                                type: { type: "STRING", enum: Object.values(EXERCISE_TYPES) },
+                                metrics: { 
+                                    type: "OBJECT",
+                                    // Se definen todas las propiedades posibles para que el objeto no esté vacío.
+                                    // No son requeridas, por lo que la IA puede omitir las que no aplican.
+                                    properties: {
+                                        sets: { type: "STRING" },
+                                        reps: { type: "STRING" },
+                                        weight: { type: "STRING" },
+                                        distance: { type: "STRING" },
+                                        duration: { type: "STRING" },
+                                        avgSpeed: { type: "STRING" },
+                                        intensity: { type: "STRING" }
+                                    }
+                                },
+                                videoSearchQuery: { type: "STRING" },
+                                equipment: { type: "STRING" },
+                                caloriesBurned: { type: "STRING" },
+                                muscleGroup: { type: "STRING" }
+                            },
+                            required: ["name", "type", "metrics", "videoSearchQuery", "equipment", "caloriesBurned", "muscleGroup"]
+                        }
+                    }
+                }
+            }
+        };
+
         try {
             const resultText = await callGeminiAPI(prompt, generationConfig);
             const parsedJson = parseJsonFromMarkdown(resultText);
-            const editableRoutine = (parsedJson.routine || []).map(ex => ({ ...ex, completed: false }));
-            if (!parsedJson.routine || parsedJson.routine.length === 0) {
-                setError("La IA no pudo generar una rutina esta vez. Inténtalo de nuevo.");
+            const editableRoutine = (parsedJson.routine || []).map(ex => ({ 
+                ...ex, 
+                type: ex.type || getExerciseType(ex.name, ex.muscleGroup),
+                completed: false 
+            }));
+
+            if (!editableRoutine || editableRoutine.length === 0) {
+                 setError("La IA no generó una rutina válida. Por favor, intenta de nuevo con una descripción más clara, por ejemplo: 'Quiero una rutina de 45 minutos para correr en cinta'.");
             } else {
                 setInProgressWorkout({ type: 'ai', exercises: editableRoutine });
             }
@@ -1145,7 +1360,29 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
     const handleCreateManualRoutine = () => {
         const newRoutineExercises = favoriteExercises
             .filter(ex => selectedExercises[ex.name])
-            .map(ex => ({ ...ex, completed: false, sets: ex.sets || '3', reps: ex.reps || '10', weight: ex.weight || '0' }));
+            .map(ex => {
+                const exerciseType = ex.type || getExerciseType(ex.name, ex.muscleGroup);
+                let metrics = ex.metrics || {};
+                
+                // Asignar métricas por defecto si no existen
+                if (Object.keys(metrics).length === 0) {
+                    switch (exerciseType) {
+                        case EXERCISE_TYPES.CARDIO_DISTANCE:
+                            metrics = { distance: '0 km', duration: '00:00', avgSpeed: '0 km/h' };
+                            break;
+                        case EXERCISE_TYPES.CARDIO_DURATION:
+                        case EXERCISE_TYPES.SPORT:
+                            metrics = { duration: '30 min', intensity: 'Moderada' };
+                            break;
+                        case EXERCISE_TYPES.STRENGTH:
+                        default:
+                            metrics = { sets: '3', reps: '10', weight: '0' };
+                            break;
+                    }
+                }
+                return { ...ex, type: exerciseType, metrics, completed: false };
+            });
+
         setInProgressWorkout({ type: 'manual', exercises: newRoutineExercises });
     };
 
@@ -1166,21 +1403,21 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
                     <div>
                         <label className="block text-sm font-medium mb-2 text-center">¿Cómo te sientes de energía hoy?</label>
                         <div className="grid grid-cols-3 gap-2">
-                           <Button onClick={() => setFatigueLevel('baja')} variant={fatigueLevel === 'baja' ? 'primary' : 'secondary'} className="flex-col py-2 text-sm"><BatteryLow size={20} className="mb-1 text-red-500"/>Baja</Button>
-                           <Button onClick={() => setFatigueLevel('normal')} variant={fatigueLevel === 'normal' ? 'primary' : 'secondary'} className="flex-col py-2 text-sm"><BatteryMedium size={20} className="mb-1 text-yellow-500"/>Normal</Button>
-                           <Button onClick={() => setFatigueLevel('alta')} variant={fatigueLevel === 'alta' ? 'primary' : 'secondary'} className="flex-col py-2 text-sm"><BatteryFull size={20} className="mb-1 text-green-500"/>Alta</Button>
+                           <Button onClick={() => setFatigueLevel('baja')} variant={fatigueLevel === 'baja' ? 'primary' : 'secondary'} className="flex-col h-16 text-sm"><BatteryLow size={20} className="mb-1 text-red-500"/>Baja</Button>
+                           <Button onClick={() => setFatigueLevel('normal')} variant={fatigueLevel === 'normal' ? 'primary' : 'secondary'} className="flex-col h-16 text-sm"><BatteryMedium size={20} className="mb-1 text-yellow-500"/>Normal</Button>
+                           <Button onClick={() => setFatigueLevel('alta')} variant={fatigueLevel === 'alta' ? 'primary' : 'secondary'} className="flex-col h-16 text-sm"><BatteryFull size={20} className="mb-1 text-green-500"/>Alta</Button>
                         </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Notas para el entrenador IA (opcional)</label>
-                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros, tengo poco tiempo..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" rows="2"></textarea>
+                        <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Ej: quiero enfocarme en hombros, tengo poco tiempo, quiero correr 5km..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" rows="2"></textarea>
                     </div>
                     <Button onClick={handleGenerateAiRoutine} disabled={isLoading} className="w-full">
                         <Sparkles size={18}/>
                         {isLoading ? 'Generando...' : 'Generar Rutina con IA'}
                     </Button>
                     {isLoading && <p className="text-center text-sm animate-pulse">El coach IA está pensando...</p>}
-                    {error && <p className="text-center text-sm text-red-500">{error}</p>}
+                    {error && <p className="text-center text-sm text-red-500 p-2 bg-red-100 dark:bg-red-900/50 rounded-lg">{error}</p>}
                 </div>
             </Card>
 
@@ -1326,7 +1563,10 @@ export default function App() {
             }
         } else {
             const { completed, ...exerciseToSave } = exercise;
-            await updateDoc(userDocRef, { favoriteExercises: arrayUnion(exerciseToSave) });
+            // Ensure the exercise has a type and metrics before saving as favorite
+            const exerciseType = exercise.type || getExerciseType(exercise.name, exercise.muscleGroup);
+            const exerciseMetrics = exercise.metrics || {};
+            await updateDoc(userDocRef, { favoriteExercises: arrayUnion({ ...exerciseToSave, type: exerciseType, metrics: exerciseMetrics }) });
         }
     };
 
