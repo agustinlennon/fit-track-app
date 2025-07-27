@@ -249,20 +249,21 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   const [timeFilter, setTimeFilter] = useState('week');
   const [creatineTimeFilter, setCreatineTimeFilter] = useState('week');
   const [aiRecommendation, setAiRecommendation] = useState({ text: '', loading: false });
-  const [activityChartView, setActivityChartView] = useState('volume');
   const [creatineStatus, setCreatineStatus] = useState('idle');
+  
+  const [activityTab, setActivityTab] = useState('fuerza');
+  const [strengthChartView, setStrengthChartView] = useState('volume');
 
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE }); // YYYY-MM-DD format
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
   const defaultTodaysLog = { loggedFoods: [], water: 0, sleep: 0, morningRoutine: false };
   const todaysLog = { ...defaultTodaysLog, ...(dailyLog[today] || {}) };
   
-  // --- CORRECCIÓN: Usar useMemo para asegurar que el plan del día se recalcule cuando cambie el schedule ---
   const todaysPlan = useMemo(() => {
     const todayDate = new Date();
     const dayName = normalizeString(todayDate.toLocaleDateString('es-ES', { weekday: 'long', timeZone: TIMEZONE }).toLowerCase());
     const plan = userData?.workoutSchedule?.[dayName] || [];
     return Array.isArray(plan) && plan.length > 0 ? plan : [{ name: 'Descanso', time: '' }];
-  }, [userData?.workoutSchedule]); // Dependencia explícita en el workoutSchedule
+  }, [userData?.workoutSchedule]);
 
   const getAiRecommendation = async () => {
     if (!userData) return;
@@ -301,7 +302,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
     const totalSets = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => exAcc + (ex.type === EXERCISE_TYPES.STRENGTH ? parseInt(ex.metrics?.sets, 10) || 0 : 0), 0) : 0), 0);
     const totalDuration = filteredData.reduce((acc, w) => acc + (Array.isArray(w.exercises) ? w.exercises.reduce((exAcc, ex) => {
         if (ex.type !== EXERCISE_TYPES.STRENGTH && ex.metrics?.duration) {
-            const timeParts = ex.metrics.duration.match(/\d+/g);
+            const timeParts = String(ex.metrics.duration).match(/\d+/g);
             if (timeParts) return exAcc + parseInt(timeParts[0], 10);
         }
         return exAcc;
@@ -309,18 +310,16 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
     return { totalWorkouts, totalSets, totalDuration };
   }, [filteredData]);
   
- const activityChartData = useMemo(() => {
+  const strengthChartData = useMemo(() => {
     const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
     const formatShortDate = (date) => date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', timeZone: TIMEZONE });
-    if (activityChartView === 'volume') {
+    if (strengthChartView === 'volume') {
         const dataByDate = filteredData.reduce((acc, workout) => {
             if (!workout.date || typeof workout.date !== 'string') return acc;
             const dateObj = new Date(workout.date);
             if (!isValidDate(dateObj)) return acc;
             const dateKey = workout.date.slice(0, 10);
-            if (!acc[dateKey]) {
-                acc[dateKey] = { series: 0, dateObj: dateObj };
-            }
+            if (!acc[dateKey]) { acc[dateKey] = { series: 0, dateObj: dateObj }; }
             (workout.exercises || []).forEach(ex => { 
                 if (ex.type === EXERCISE_TYPES.STRENGTH) {
                     acc[dateKey].series += parseInt(ex.metrics?.sets, 10) || 0; 
@@ -330,15 +329,13 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         }, {});
         return Object.values(dataByDate).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime()).map((data) => ({ name: formatShortDate(data.dateObj), series: data.series }));
     }
-    if (activityChartView === 'muscle') {
+    if (strengthChartView === 'muscle') {
         const muscleCounts = filteredData.reduce((acc, workout) => {
             (workout.exercises || []).forEach(ex => {
-                const muscle = ex.muscleGroup || 'Otro';
-                if (!acc[muscle]) { acc[muscle] = 0; }
                 if (ex.type === EXERCISE_TYPES.STRENGTH) {
+                    const muscle = ex.muscleGroup || 'Otro';
+                    if (!acc[muscle]) { acc[muscle] = 0; }
                     acc[muscle] += parseInt(ex.metrics?.sets, 10) || 0;
-                } else {
-                    acc[muscle] += 1; // Count non-strength activities as one unit
                 }
             });
             return acc;
@@ -348,7 +345,34 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         return Object.entries(muscleCounts).map(([name, series]) => ({ name, series, fullMark: totalSeries })).sort((a, b) => b.series - a.series);
     }
     return [];
-  }, [filteredData, activityChartView]);
+  }, [filteredData, strengthChartView]);
+
+  const cardioChartData = useMemo(() => {
+    const cardioActivities = filteredData.flatMap(w => w.exercises || [])
+      .filter(ex => ex.type === EXERCISE_TYPES.CARDIO_DISTANCE || ex.type === EXERCISE_TYPES.CARDIO_DURATION || ex.type === EXERCISE_TYPES.SPORT);
+
+    const aggregatedData = cardioActivities.reduce((acc, ex) => {
+      const name = ex.name.split('-')[0].trim();
+      if (!acc[name]) {
+        acc[name] = { duration: 0, distance: 0 };
+      }
+      
+      const durationMatch = String(ex.metrics?.duration || '0').match(/\d+/);
+      if (durationMatch) {
+        acc[name].duration += parseInt(durationMatch[0], 10);
+      }
+      
+      const distanceMatch = String(ex.metrics?.distance || '0').match(/(\d+(\.\d+)?)/);
+      if (distanceMatch) {
+        acc[name].distance += parseFloat(distanceMatch[0]);
+      }
+      
+      return acc;
+    }, {});
+
+    return Object.entries(aggregatedData).map(([name, data]) => ({ name, ...data }));
+  }, [filteredData]);
+
 
   const creatineChartData = useMemo(() => {
       const now = new Date();
@@ -416,7 +440,7 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
                 <h3 className="font-bold text-xl text-gray-800 dark:text-white">Foco del Día</h3>
                 {todaysPlan[0].name !== 'Descanso' ? (
                     todaysPlan.map((p, i) => {
-                        const focus = getWorkoutFocus([{ name: p.name }]); // Wrap in array for consistency
+                        const focus = getWorkoutFocus([{ name: p.name }]);
                         const visuals = getFocusVisuals(focus, 24);
                         return (
                             <div key={i} className="flex justify-between items-center mt-2">
@@ -469,38 +493,82 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
         </div>
         <div className="grid grid-cols-3 gap-4 text-center mb-6">
             <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalWorkouts}</p><p className="text-xs text-gray-500 dark:text-gray-400">Entrenos</p></div>
-            <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalSets}</p><p className="text-xs text-gray-500 dark:text-gray-400">Series</p></div>
-            <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalDuration}</p><p className="text-xs text-gray-500 dark:text-gray-400">Minutos Cardio</p></div>
+            <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalSets}</p><p className="text-xs text-gray-500 dark:text-gray-400">Series (Fuerza)</p></div>
+            <div><p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{workoutSummary.totalDuration}</p><p className="text-xs text-gray-500 dark:text-gray-400">Minutos (Cardio)</p></div>
         </div>
+        
         <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div className="flex justify-center gap-2 mb-4">
-                 <Button onClick={() => setActivityChartView('volume')} variant={activityChartView === 'volume' ? 'primary' : 'secondary'} className="text-xs px-3 py-1">Volumen</Button>
-                 <Button onClick={() => setActivityChartView('muscle')} variant={activityChartView === 'muscle' ? 'primary' : 'secondary'} className="text-xs px-3 py-1">Músculos</Button>
+            <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+                <button onClick={() => setActivityTab('fuerza')} className={`flex-1 py-2 font-semibold ${activityTab === 'fuerza' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Fuerza</button>
+                <button onClick={() => setActivityTab('cardio')} className={`flex-1 py-2 font-semibold ${activityTab === 'cardio' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>Cardio y Deportes</button>
             </div>
-            <div className="h-60">
-                {activityChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        {activityChartView === 'volume' ? (
-                            <AreaChart data={activityChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                <defs><linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
-                                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
-                                <XAxis dataKey="name" fontSize={12} /><YAxis fontSize={12} />
-                                <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
-                                <Area type="monotone" dataKey="series" name="Series totales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorVolume)" />
-                            </AreaChart>
-                        ) : (
-                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={activityChartData}>
-                                <PolarGrid strokeOpacity={0.3} /><PolarAngleAxis dataKey="name" fontSize={12} />
-                                <PolarRadiusAxis angle={30} domain={[0, 'dataMax + 5']} fontSize={10} axisLine={false} tick={false} />
-                                <Radar name="Series" dataKey="series" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
-                                <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
-                            </RadarChart>
-                        )}
-                    </ResponsiveContainer>
-                ) : ( <div className="flex items-center justify-center h-full text-gray-500"><p>No hay datos para mostrar en este período.</p></div> )}
-            </div>
+
+            {activityTab === 'fuerza' && (
+                <div>
+                    <div className="flex justify-center gap-2 mb-4">
+                        <Button onClick={() => setStrengthChartView('volume')} variant={strengthChartView === 'volume' ? 'primary' : 'secondary'} className="text-xs px-3 py-1">Volumen</Button>
+                        <Button onClick={() => setStrengthChartView('muscle')} variant={strengthChartView === 'muscle' ? 'primary' : 'secondary'} className="text-xs px-3 py-1">Músculos</Button>
+                    </div>
+                    <div className="h-60">
+                        {strengthChartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                {strengthChartView === 'volume' ? (
+                                    <AreaChart data={strengthChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <defs><linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
+                                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
+                                        <XAxis dataKey="name" fontSize={12} /><YAxis fontSize={12} />
+                                        <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
+                                        <Area type="monotone" dataKey="series" name="Series totales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorVolume)" />
+                                    </AreaChart>
+                                ) : (
+                                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={strengthChartData}>
+                                        <PolarGrid strokeOpacity={0.3} /><PolarAngleAxis dataKey="name" fontSize={12} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 'dataMax + 5']} fontSize={10} axisLine={false} tick={false} />
+                                        <Radar name="Series" dataKey="series" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                                        <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }}/>
+                                    </RadarChart>
+                                )}
+                            </ResponsiveContainer>
+                        ) : ( <div className="flex items-center justify-center h-full text-gray-500"><p>No hay datos de fuerza para mostrar.</p></div> )}
+                    </div>
+                </div>
+            )}
+
+            {activityTab === 'cardio' && (
+                <div className="space-y-6">
+                    <div className="h-60">
+                        <h4 className="font-semibold text-center mb-2">Duración por Actividad (min)</h4>
+                        {cardioChartData.filter(d => d.duration > 0).length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={cardioChartData} layout="vertical" margin={{ top: 5, right: 20, left: 30, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                    <XAxis type="number" fontSize={12} />
+                                    <YAxis type="category" dataKey="name" fontSize={12} width={80} tick={{ textAnchor: 'end' }} />
+                                    <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
+                                    <Bar dataKey="duration" name="Minutos" fill="#8884d8" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : ( <div className="flex items-center justify-center h-full text-gray-500"><p>No hay datos de duración para mostrar.</p></div> )}
+                    </div>
+                    <div className="h-60">
+                         <h4 className="font-semibold text-center mb-2">Distancia por Actividad (km)</h4>
+                        {cardioChartData.filter(d => d.distance > 0).length > 0 ? (
+                             <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={cardioChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                    <XAxis dataKey="name" fontSize={12} />
+                                    <YAxis fontSize={12} />
+                                    <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.75rem', color: '#ffffff' }} />
+                                    <Bar dataKey="distance" name="Kilómetros" fill="#82ca9d" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : ( <div className="flex items-center justify-center h-full text-gray-500"><p>No hay datos de distancia para mostrar.</p></div> )}
+                    </div>
+                </div>
+            )}
         </div>
       </Card>
+      
       <Card>
         <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-white">Macronutrientes</h3>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
@@ -762,7 +830,7 @@ const WorkoutPlanner = ({ userData, handleUpdateSchedule, handleUpdateWorkoutOpt
     const addWorkoutToDay = (day) => { const newSchedule = JSON.parse(JSON.stringify(schedule)); if (!newSchedule[day] || !Array.isArray(newSchedule[day])) { newSchedule[day] = []; } const defaultWorkoutName = workoutOptions.find(opt => opt !== 'Descanso') || 'Descanso'; newSchedule[day].push({ time: '12:00', name: defaultWorkoutName }); setSchedule(newSchedule); };
     const removeWorkoutFromDay = (day, index) => { const newSchedule = JSON.parse(JSON.stringify(schedule)); if (newSchedule[day] && Array.isArray(newSchedule[day])) { newSchedule[day].splice(index, 1); setSchedule(newSchedule); } };
     const handleAddNewOption = () => { if (newOption && !workoutOptions.includes(newOption)) { const newOptionsList = [...workoutOptions, newOption]; setWorkoutOptions(newOptionsList); handleUpdateWorkoutOptions(newOptionsList); setNewOption(''); } };
-    const handleSaveChanges = async () => { setSaveStatus('saving'); try { await handleUpdateSchedule(schedule); setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); } catch (error) { console.error("Error al guardar el plan semanal.", error); setSaveStatus('idle'); } };
+    const handleSaveChanges = async () => { setSaveStatus('saving'); try { await handleUpdateSchedule(schedule); setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 2000); } catch (error) { console.error("Error al guardar el plan semanal.", error); throw error; } };
     return (
         <div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Plan Semanal</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
@@ -800,7 +868,6 @@ const Timer = ({ title, initialSeconds = 0, direction = 'up', onTimeSet }) => {
     );
 };
 
-// --- VISTA DE RUTINA ACTIVA (MODIFICADA) ---
 const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgressWorkout, setInProgressWorkout, handleToggleFavorite, handleClearInProgressWorkout }) => {
     const [restTime, setRestTime] = useState(90);
 
@@ -817,7 +884,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
         const updatedRoutine = [...routine];
         const updatedExercise = { ...updatedRoutine[index] };
         
-        // Ensure metrics object exists
         if (!updatedExercise.metrics) {
             updatedExercise.metrics = {};
         }
@@ -851,7 +917,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
         }, 0) : 0;
     }, [routine]);
 
-    // --- NUEVO: Componente para renderizar métricas dinámicamente ---
     const RenderExerciseMetrics = ({ exercise, index }) => {
         const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
         const metrics = exercise.metrics || {};
@@ -882,7 +947,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
                     </div>
                 );
             default:
-                // Fallback por si el tipo no es reconocido, muestra los campos de fuerza por defecto
                 return (
                     <div className="p-2 my-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
                         <p className="text-xs text-yellow-800 dark:text-yellow-200">Tipo de ejercicio no reconocido. Mostrando campos por defecto.</p>
@@ -1236,7 +1300,6 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
     );
 };
 
-// --- VISTA DE CREACIÓN DE RUTINA (MODIFICADA) ---
 const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleToggleFavorite }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -1293,7 +1356,6 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
         6. "caloriesBurned": Estimación de kcal.
         7. "muscleGroup": Grupo muscular principal.`;
 
-        // --- CORRECCIÓN: ESQUEMA JSON para la IA ---
         const generationConfig = {
             responseMimeType: "application/json",
             responseSchema: {
@@ -1308,8 +1370,6 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
                                 type: { type: "STRING", enum: Object.values(EXERCISE_TYPES) },
                                 metrics: { 
                                     type: "OBJECT",
-                                    // Se definen todas las propiedades posibles para que el objeto no esté vacío.
-                                    // No son requeridas, por lo que la IA puede omitir las que no aplican.
                                     properties: {
                                         sets: { type: "STRING" },
                                         reps: { type: "STRING" },
@@ -1364,7 +1424,6 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
                 const exerciseType = ex.type || getExerciseType(ex.name, ex.muscleGroup);
                 let metrics = ex.metrics || {};
                 
-                // Asignar métricas por defecto si no existen
                 if (Object.keys(metrics).length === 0) {
                     switch (exerciseType) {
                         case EXERCISE_TYPES.CARDIO_DISTANCE:
