@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle, Bike, Waves } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle, Bike, Waves, Minus, Plus } from 'lucide-react';
 
 
 // --- FUNCIONES AUXILIARES Y DE LÓGICA COMPARTIDA ---
@@ -14,25 +14,18 @@ const normalizeString = (str) => {
 
 const TIMEZONE = 'America/Argentina/Buenos_Aires';
 
-// --- NUEVO: SISTEMA DE CLASIFICACIÓN DE EJERCICIOS ---
 const EXERCISE_TYPES = {
     STRENGTH: 'strength',
-    CARDIO_DISTANCE: 'cardio_distance', // Correr, nadar, bici
-    CARDIO_DURATION: 'cardio_duration', // Yoga, elíptica, HIIT
-    SPORT: 'sport', // Futbol, Tenis
+    CARDIO_DISTANCE: 'cardio_distance',
+    CARDIO_DURATION: 'cardio_duration',
+    SPORT: 'sport',
 };
 
-const CARDIO_DISTANCE_KEYWORDS = ['natacion', 'nadar', 'correr', 'cinta', 'trote', 'bicicleta', 'bici', 'ciclismo', 'remar', 'remo'];
+const CARDIO_DISTANCE_KEYWORDS = ['natacion', 'nadar', 'swimming', 'correr', 'running', 'cinta', 'trote', 'bicicleta', 'bici', 'cycling', 'remar', 'remo', 'rowing'];
 const CARDIO_DURATION_KEYWORDS = ['yoga', 'estiramientos', 'flexibilidad', 'movilidad', 'eliptica', 'hiit', 'cardio general', 'skipping', 'jacks', 'burpee'];
-const SPORT_KEYWORDS = ['futbol', 'tenis', 'crossfit', 'deportes', 'baloncesto', 'boxeo'];
+const SPORT_KEYWORDS = ['futbol', 'soccer', 'tenis', 'tennis', 'crossfit', 'deportes', 'baloncesto', 'basketball', 'boxeo', 'boxing'];
 const STRENGTH_MUSCLE_GROUPS = ['pecho', 'espalda', 'hombros', 'biceps', 'triceps', 'brazos', 'piernas', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'gemelos', 'core', 'abdominales'];
 
-/**
- * Clasifica un ejercicio basado en su nombre y grupo muscular.
- * @param {string} exerciseName - El nombre del ejercicio.
- * @param {string} muscleGroup - El grupo muscular (opcional).
- * @returns {string} - El tipo de ejercicio (ej: 'strength', 'cardio_distance').
- */
 const getExerciseType = (exerciseName, muscleGroup = '') => {
     const name = normalizeString((exerciseName || '').toLowerCase());
     const muscle = normalizeString((muscleGroup || '').toLowerCase());
@@ -42,7 +35,6 @@ const getExerciseType = (exerciseName, muscleGroup = '') => {
     if (CARDIO_DURATION_KEYWORDS.some(k => name.includes(k))) return EXERCISE_TYPES.CARDIO_DURATION;
     if (STRENGTH_MUSCLE_GROUPS.some(m => name.includes(m) || muscle.includes(m))) return EXERCISE_TYPES.STRENGTH;
     
-    // Si no se reconoce, se asume que es de fuerza como fallback seguro.
     return EXERCISE_TYPES.STRENGTH;
 };
 
@@ -231,6 +223,44 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     </div>
   );
 };
+
+const MetricStepper = ({ label, value, onUpdate, step = 1, min = 0 }) => {
+    const numericValue = parseFloat(value) || 0;
+
+    const handleIncrement = () => {
+        onUpdate((numericValue + step).toFixed(2).replace(/\.00$/, '').replace(/\.([1-9])0$/, '.$1'));
+    };
+
+    const handleDecrement = () => {
+        const newValue = numericValue - step;
+        onUpdate((newValue < min ? min : newValue).toFixed(2).replace(/\.00$/, '').replace(/\.([1-9])0$/, '.$1'));
+    };
+    
+    const handleInputChange = (e) => {
+        onUpdate(e.target.value);
+    };
+
+    return (
+        <div className="flex flex-col items-center w-full">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{label}</label>
+            <div className="flex items-center w-full">
+                <Button onClick={handleDecrement} variant="secondary" className="p-0 h-10 w-10 rounded-r-none">
+                    <Minus size={16} />
+                </Button>
+                <input 
+                    type="number" 
+                    value={value}
+                    onChange={handleInputChange}
+                    className="w-full p-2 h-10 text-center font-bold text-2xl bg-gray-100 dark:bg-gray-700 border-y-2 border-x-0 border-gray-200 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                />
+                <Button onClick={handleIncrement} variant="secondary" className="p-0 h-10 w-10 rounded-l-none">
+                    <Plus size={16} />
+                </Button>
+            </div>
+        </div>
+    );
+};
+
 
 const DashboardSkeleton = () => (
     <div className="space-y-6 animate-pulse">
@@ -918,42 +948,64 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
     }, [routine]);
 
     const RenderExerciseMetrics = ({ exercise, index }) => {
-        const inputClasses = "w-full p-1 mt-1 rounded bg-transparent border-transparent focus:bg-gray-100 dark:focus:bg-gray-700 focus:border-gray-300 dark:focus:border-gray-600 focus:ring-1 focus:ring-blue-500 transition-all";
         const metrics = exercise.metrics || {};
+        const inputClasses = "w-full p-2 h-10 text-center bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:ring-2 focus:ring-blue-500";
 
         switch (exercise.type) {
             case EXERCISE_TYPES.STRENGTH:
                 return (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                        <div><label className="text-xs font-medium">Series</label><input type="text" value={metrics.sets || ''} onChange={(e) => handleMetricUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div>
-                        <div><label className="text-xs font-medium">Reps</label><input type="text" value={metrics.reps || ''} onChange={(e) => handleMetricUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div>
-                        <div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={metrics.weight || ''} onChange={(e) => handleMetricUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                        <MetricStepper label="Series" value={metrics.sets || '0'} onUpdate={(val) => handleMetricUpdate(index, 'sets', val)} />
+                        <MetricStepper label="Reps" value={metrics.reps || '0'} onUpdate={(val) => handleMetricUpdate(index, 'reps', val)} />
+                        <MetricStepper label="Peso (kg)" value={metrics.weight || '0'} onUpdate={(val) => handleMetricUpdate(index, 'weight', val)} step={1.25} />
                     </div>
                 );
             case EXERCISE_TYPES.CARDIO_DISTANCE:
+                const isSwimming = normalizeString(exercise.name.toLowerCase()).includes('natacion');
+                
+                if (isSwimming) {
+                    return (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 items-start">
+                            <MetricStepper label="Distancia (m)" value={metrics.distance || '0'} onUpdate={(val) => handleMetricUpdate(index, 'distance', val)} step={25} />
+                            <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={1} />
+                            <div className="flex flex-col items-center w-full">
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Intensidad</label>
+                                <input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="ej: Suave" className={inputClasses} />
+                            </div>
+                        </div>
+                    );
+                }
+                
+                // Default for other distance cardio
                 return (
-                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                        <div><label className="text-xs font-medium">Distancia</label><input type="text" value={metrics.distance || ''} onChange={(e) => handleMetricUpdate(index, 'distance', e.target.value)} placeholder="ej: 5 km" className={inputClasses} /></div>
-                        <div><label className="text-xs font-medium">Duración</label><input type="text" value={metrics.duration || ''} onChange={(e) => handleMetricUpdate(index, 'duration', e.target.value)} placeholder="ej: 25:00" className={inputClasses} /></div>
-                        <div><label className="text-xs font-medium">Velocidad Prom.</label><input type="text" value={metrics.avgSpeed || ''} onChange={(e) => handleMetricUpdate(index, 'avgSpeed', e.target.value)} placeholder="ej: 12 km/h" className={inputClasses} /></div>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 items-end">
+                        <MetricStepper label="Distancia (km)" value={metrics.distance || '0'} onUpdate={(val) => handleMetricUpdate(index, 'distance', val)} step={0.1} />
+                        <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={1} />
+                        <div className="flex flex-col items-center w-full">
+                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Velocidad Prom.</label>
+                            <input type="text" value={metrics.avgSpeed || ''} onChange={(e) => handleMetricUpdate(index, 'avgSpeed', e.target.value)} placeholder="ej: 10 km/h" className={inputClasses} />
+                        </div>
                     </div>
                 );
             case EXERCISE_TYPES.CARDIO_DURATION:
             case EXERCISE_TYPES.SPORT:
                  return (
-                     <div className="grid grid-cols-2 gap-4 mt-4">
-                        <div><label className="text-xs font-medium">Duración</label><input type="text" value={metrics.duration || ''} onChange={(e) => handleMetricUpdate(index, 'duration', e.target.value)} placeholder="ej: 45 min" className={inputClasses} /></div>
-                        <div><label className="text-xs font-medium">Intensidad</label><input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="ej: Moderada" className={inputClasses} /></div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 items-end">
+                        <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={5} />
+                        <div className="flex flex-col items-center w-full">
+                             <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Intensidad</label>
+                            <input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="Moderada" className={inputClasses} />
+                        </div>
                     </div>
                 );
             default:
                 return (
                     <div className="p-2 my-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
                         <p className="text-xs text-yellow-800 dark:text-yellow-200">Tipo de ejercicio no reconocido. Mostrando campos por defecto.</p>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
-                            <div><label className="text-xs font-medium">Series</label><input type="text" value={metrics.sets || ''} onChange={(e) => handleMetricUpdate(index, 'sets', e.target.value)} className={inputClasses} /></div>
-                            <div><label className="text-xs font-medium">Reps</label><input type="text" value={metrics.reps || ''} onChange={(e) => handleMetricUpdate(index, 'reps', e.target.value)} className={inputClasses} /></div>
-                            <div><label className="text-xs font-medium">Peso (kg)</label><input type="text" value={metrics.weight || ''} onChange={(e) => handleMetricUpdate(index, 'weight', e.target.value)} className={inputClasses} /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+                           <MetricStepper label="Series" value={metrics.sets || '0'} onUpdate={(val) => handleMetricUpdate(index, 'sets', val)} />
+                           <MetricStepper label="Reps" value={metrics.reps || '0'} onUpdate={(val) => handleMetricUpdate(index, 'reps', val)} />
+                           <MetricStepper label="Peso (kg)" value={metrics.weight || '0'} onUpdate={(val) => handleMetricUpdate(index, 'weight', val)} step={1.25} />
                         </div>
                     </div>
                 );
@@ -1300,7 +1352,7 @@ const IAChat = ({ userData, completedWorkouts, dailyLog, weightHistory, handleGo
     );
 };
 
-const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleToggleFavorite }) => {
+const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleToggleFavorite, completedWorkouts }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [fatigueLevel, setFatigueLevel] = useState('normal');
@@ -1326,7 +1378,7 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
     const handleGenerateAiRoutine = async () => {
         setIsLoading(true);
         setError('');
-        const historySummary = Array.isArray(userData.completedWorkouts) ? userData.completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
+        const historySummary = Array.isArray(completedWorkouts) ? completedWorkouts.slice(0, 5).map(w => `El ${new Date(w.date).toLocaleDateString('es-ES')} hice: ${Array.isArray(w.exercises) ? w.exercises.map(e => e.name).join(', ') : ''}`).join('; ') : '';
         const todayDay = new Date().toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
         const todayWorkouts = (userData.workoutSchedule && Array.isArray(userData.workoutSchedule[todayDay])) ? userData.workoutSchedule[todayDay] : [];
         const todayWorkoutText = todayWorkouts.length > 0 ? todayWorkouts.map(w => w.name).join(' y ') : 'Descanso';
@@ -1348,9 +1400,9 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
         1. "name": Nombre del ejercicio.
         2. "type": Clasifica el ejercicio. Usa UNO de: "${EXERCISE_TYPES.STRENGTH}", "${EXERCISE_TYPES.CARDIO_DISTANCE}", "${EXERCISE_TYPES.CARDIO_DURATION}", "${EXERCISE_TYPES.SPORT}".
         3. "metrics": Un objeto con las métricas EXACTAS para ese tipo:
-           - Para "${EXERCISE_TYPES.STRENGTH}": { "sets": "...", "reps": "...", "weight": "..." }
-           - Para "${EXERCISE_TYPES.CARDIO_DISTANCE}": { "distance": "...", "duration": "...", "avgSpeed": "(opcional)" }
-           - Para "${EXERCISE_TYPES.CARDIO_DURATION}" o "${EXERCISE_TYPES.SPORT}": { "duration": "...", "intensity": "(opcional)" }
+           - Para "${EXERCISE_TYPES.STRENGTH}": { "sets": "4", "reps": "10", "weight": "80" } (Usa solo números como strings)
+           - Para "${EXERCISE_TYPES.CARDIO_DISTANCE}": { "distance": "1.5", "duration": "30" } (distancia SIEMPRE en km, ej: 1500m es "1.5". Duración siempre en minutos. Solo números como strings)
+           - Para "${EXERCISE_TYPES.CARDIO_DURATION}" o "${EXERCISE_TYPES.SPORT}": { "duration": "45", "intensity": "Moderada" } (duración en minutos. Solo número para duración)
         4. "videoSearchQuery": Búsqueda en YouTube.
         5. "equipment": Equipo necesario.
         6. "caloriesBurned": Estimación de kcal.
@@ -1395,11 +1447,25 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
         try {
             const resultText = await callGeminiAPI(prompt, generationConfig);
             const parsedJson = parseJsonFromMarkdown(resultText);
-            const editableRoutine = (parsedJson.routine || []).map(ex => ({ 
-                ...ex, 
-                type: ex.type || getExerciseType(ex.name, ex.muscleGroup),
-                completed: false 
-            }));
+            
+            const allPastExercises = completedWorkouts
+                .flatMap(workout => workout.exercises || [])
+                .reduce((acc, ex) => {
+                    if (!acc[ex.name]) {
+                        acc[ex.name] = ex.metrics;
+                    }
+                    return acc;
+                }, {});
+
+            const editableRoutine = (parsedJson.routine || []).map(ex => {
+                const lastMetrics = allPastExercises[ex.name];
+                return { 
+                    ...ex, 
+                    metrics: lastMetrics || ex.metrics,
+                    type: ex.type || getExerciseType(ex.name, ex.muscleGroup),
+                    completed: false 
+                };
+            });
 
             if (!editableRoutine || editableRoutine.length === 0) {
                  setError("La IA no generó una rutina válida. Por favor, intenta de nuevo con una descripción más clara, por ejemplo: 'Quiero una rutina de 45 minutos para correr en cinta'.");
@@ -1418,20 +1484,30 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
     };
 
     const handleCreateManualRoutine = () => {
+        const allPastExercises = completedWorkouts
+            .flatMap(workout => workout.exercises || [])
+            .reduce((acc, ex) => {
+                if (!acc[ex.name]) {
+                    acc[ex.name] = ex.metrics;
+                }
+                return acc;
+            }, {});
+
         const newRoutineExercises = favoriteExercises
             .filter(ex => selectedExercises[ex.name])
             .map(ex => {
                 const exerciseType = ex.type || getExerciseType(ex.name, ex.muscleGroup);
-                let metrics = ex.metrics || {};
+                const lastMetrics = allPastExercises[ex.name];
+                let metrics = lastMetrics || ex.metrics || {};
                 
                 if (Object.keys(metrics).length === 0) {
                     switch (exerciseType) {
                         case EXERCISE_TYPES.CARDIO_DISTANCE:
-                            metrics = { distance: '0 km', duration: '00:00', avgSpeed: '0 km/h' };
+                            metrics = { distance: '0', duration: '0', avgSpeed: '' };
                             break;
                         case EXERCISE_TYPES.CARDIO_DURATION:
                         case EXERCISE_TYPES.SPORT:
-                            metrics = { duration: '30 min', intensity: 'Moderada' };
+                            metrics = { duration: '30', intensity: 'Moderada' };
                             break;
                         case EXERCISE_TYPES.STRENGTH:
                         default:
@@ -1622,7 +1698,6 @@ export default function App() {
             }
         } else {
             const { completed, ...exerciseToSave } = exercise;
-            // Ensure the exercise has a type and metrics before saving as favorite
             const exerciseType = exercise.type || getExerciseType(exercise.name, exercise.muscleGroup);
             const exerciseMetrics = exercise.metrics || {};
             await updateDoc(userDocRef, { favoriteExercises: arrayUnion({ ...exerciseToSave, type: exerciseType, metrics: exerciseMetrics }) });
@@ -1643,7 +1718,7 @@ export default function App() {
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} handleDeleteWorkoutLog={handleDeleteWorkoutLog} />;
-            case 'workout-creation': return <WorkoutCreationView userData={userData} setView={setView} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} />;
+            case 'workout-creation': return <WorkoutCreationView userData={userData} setView={setView} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} completedWorkouts={completedWorkouts} />;
             case 'active-workout': return <ActiveWorkoutView userData={userData} handleGoBack={setView} handleSaveWorkout={handleSaveWorkout} inProgressWorkout={inProgressWorkout} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} handleClearInProgressWorkout={handleClearInProgressWorkout} />;
             case 'ai-chat': return <IAChat userData={userData} completedWorkouts={completedWorkouts} dailyLog={dailyLog} weightHistory={weightHistory} handleGoBack={() => setView('dashboard')} />;
             default: return <Dashboard userData={userData} dailyLog={dailyLog} completedWorkouts={completedWorkouts} creatineLog={creatineLog} setView={setView} handleLogCreatine={handleLogCreatine} inProgressWorkout={inProgressWorkout} />;
@@ -1658,6 +1733,18 @@ export default function App() {
 
     return (
         <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen font-sans">
+             <style>{`
+                /* Ocultar flechas de los inputs numéricos en Chrome, Safari, Edge, Opera */
+                input[type=number]::-webkit-inner-spin-button,
+                input[type=number]::-webkit-outer-spin-button {
+                  -webkit-appearance: none;
+                  margin: 0;
+                }
+                /* Ocultar flechas de los inputs numéricos en Firefox */
+                input[type=number] {
+                  -moz-appearance: textfield;
+                }
+            `}</style>
              <div className="flex flex-col sm:flex-row">
                  <nav className="fixed bottom-0 sm:static sm:h-screen w-full sm:w-64 bg-white dark:bg-gray-800 shadow-lg sm:shadow-none border-t sm:border-r border-gray-200 p-2 sm:p-4 z-40">
                      <div className="hidden sm:flex sm:flex-col sm:justify-start sm:gap-2 h-full">
