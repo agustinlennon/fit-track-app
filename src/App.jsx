@@ -947,6 +947,11 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
         }, 0) : 0;
     }, [routine]);
 
+    // --- CAMBIO PRINCIPAL ---
+    // Se ha refactorizado este componente para mostrar siempre los campos correctos 
+    // para los ejercicios de distancia (correr, nadar, etc.), incluso si la IA 
+    // los clasifica incorrectamente. Ahora, si un ejercicio contiene palabras clave 
+    // como "correr" o "natacion", mostrará los campos de distancia, duración e intensidad.
     const RenderExerciseMetrics = ({ exercise, index }) => {
         const metrics = exercise.metrics || {};
         const inputClasses = "w-full p-2 h-10 text-center bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:ring-2 focus:ring-blue-500";
@@ -982,13 +987,44 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
                         <MetricStepper label="Distancia (km)" value={metrics.distance || '0'} onUpdate={(val) => handleMetricUpdate(index, 'distance', val)} step={0.1} />
                         <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={1} />
                         <div className="flex flex-col items-center w-full">
-                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Velocidad Prom.</label>
-                            <input type="text" value={metrics.avgSpeed || ''} onChange={(e) => handleMetricUpdate(index, 'avgSpeed', e.target.value)} placeholder="ej: 10 km/h" className={inputClasses} />
+                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Intensidad</label>
+                            <input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="ej: Rápido" className={inputClasses} />
                         </div>
                     </div>
                 );
             case EXERCISE_TYPES.CARDIO_DURATION:
             case EXERCISE_TYPES.SPORT:
+                 // Verifica si este ejercicio, a pesar de su tipo, debería tener métricas de distancia.
+                 const isMiscategorizedAsSwimming = normalizeString(exercise.name.toLowerCase()).includes('natacion');
+                 const isMiscategorizedAsDistance = !isMiscategorizedAsSwimming && CARDIO_DISTANCE_KEYWORDS.some(k => normalizeString(exercise.name.toLowerCase()).includes(k));
+
+                 if (isMiscategorizedAsSwimming) {
+                     return (
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 items-start">
+                             <MetricStepper label="Distancia (m)" value={metrics.distance || '0'} onUpdate={(val) => handleMetricUpdate(index, 'distance', val)} step={25} />
+                             <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={1} />
+                             <div className="flex flex-col items-center w-full">
+                                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Intensidad</label>
+                                 <input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="ej: Suave" className={inputClasses} />
+                             </div>
+                         </div>
+                     );
+                 }
+
+                 if (isMiscategorizedAsDistance) {
+                     return (
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 items-end">
+                             <MetricStepper label="Distancia (km)" value={metrics.distance || '0'} onUpdate={(val) => handleMetricUpdate(index, 'distance', val)} step={0.1} />
+                             <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={1} />
+                             <div className="flex flex-col items-center w-full">
+                                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Intensidad</label>
+                                 <input type="text" value={metrics.intensity || ''} onChange={(e) => handleMetricUpdate(index, 'intensity', e.target.value)} placeholder="ej: Rápido" className={inputClasses} />
+                             </div>
+                         </div>
+                     );
+                 }
+
+                 // Vista original para ejercicios que están correctamente tipados como duración/deporte sin distancia
                  return (
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 items-end">
                         <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={5} />
