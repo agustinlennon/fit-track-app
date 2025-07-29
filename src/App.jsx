@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, signInAnonymously, linkWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, deleteDoc, arrayUnion, arrayRemove, query, where, getDocs, Timestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
-import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle, Bike, Waves, Minus, Plus } from 'lucide-react';
+import { Youtube, PlusCircle, Trash2, Sun, Moon, Utensils, Dumbbell, Droplet, Bed, CheckCircle, BarChart2, User, Settings as SettingsIcon, X, Calendar, Flame, Sparkles, Clock, Edit, Play, Pause, RotateCcw, Check, Ruler, LogOut, History, Star, Bot, Send, ChevronLeft, ChevronRight, BrainCircuit, TestTube2, Activity, TrendingUp, Zap, HeartPulse, ChevronDown, BatteryLow, BatteryMedium, BatteryFull, Eye, EyeOff, PersonStanding, Trophy, Footprints, AlertTriangle, Bike, Waves, Minus, Plus, BookCopy, ScanLine, CameraOff } from 'lucide-react';
 
 
 // --- FUNCIONES AUXILIARES Y DE LÓGICA COMPARTIDA ---
@@ -653,12 +653,16 @@ const Dashboard = ({ userData, dailyLog, completedWorkouts, setView, handleLogCr
   );
 };
 
-const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => {
+const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack, myMeals, handleLogMyMeal }) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const todaysLog = { loggedFoods: [], ...(dailyLog[today] || {}) };
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedMeal, setSelectedMeal] = useState('desayuno');
-    const handleOpenModal = (meal) => { setSelectedMeal(meal); setIsModalOpen(true); };
+    const [isAddFoodModalOpen, setIsAddFoodModalOpen] = useState(false);
+    const [isAddMealModalOpen, setIsAddMealModalOpen] = useState(false);
+    const [selectedMealType, setSelectedMealType] = useState('desayuno');
+
+    const handleOpenAddFoodModal = (meal) => { setSelectedMealType(meal); setIsAddFoodModalOpen(true); };
+    const handleOpenAddMealModal = (meal) => { setSelectedMealType(meal); setIsAddMealModalOpen(true); };
+    
     const meals = { desayuno: 'Desayuno', almuerzo: 'Almuerzo', cena: 'Cena', snacks: 'Snacks' };
     const getFoodsForMeal = (meal) => (todaysLog.loggedFoods || []).filter(f => f.meal === meal);
     const removeFood = (foodToRemove) => handleLogFood(today, { loggedFoods: arrayRemove(foodToRemove) }, true);
@@ -668,7 +672,13 @@ const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => 
             <div className="space-y-6">
                 {Object.entries(meals).map(([key, name]) => (
                     <Card key={key}>
-                        <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-lg text-gray-700 dark:text-gray-200">{name}</h3><Button onClick={() => handleOpenModal(key)} variant="secondary" className="px-3 py-1 text-sm"> <PlusCircle size={16}/> Añadir </Button></div>
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="font-bold text-lg text-gray-700 dark:text-gray-200">{name}</h3>
+                            <div className="flex gap-2">
+                                <Button onClick={() => handleOpenAddMealModal(key)} variant="secondary" className="px-3 py-1 text-sm"><BookCopy size={16}/> Añadir Receta</Button>
+                                <Button onClick={() => handleOpenAddFoodModal(key)} variant="secondary" className="px-3 py-1 text-sm"><PlusCircle size={16}/> Añadir Alimento</Button>
+                            </div>
+                        </div>
                         <ul className="space-y-2">
                             {getFoodsForMeal(key).length > 0 ? getFoodsForMeal(key).map((food, index) => (
                                 <li key={`${food.foodId}-${index}`} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md">
@@ -680,7 +690,8 @@ const FoodLogger = ({ dailyLog, foodDatabase, handleLogFood, handleGoBack }) => 
                     </Card>
                 ))}
             </div>
-            <AddFoodModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} foodDatabase={foodDatabase} handleLogFood={handleLogFood} mealType={selectedMeal} today={today} />
+            <AddFoodModal isOpen={isAddFoodModalOpen} onClose={() => setIsAddFoodModalOpen(false)} foodDatabase={foodDatabase} handleLogFood={handleLogFood} mealType={selectedMealType} today={today} />
+            <AddMyMealModal isOpen={isAddMealModalOpen} onClose={() => setIsAddMealModalOpen(false)} myMeals={myMeals} handleLogMyMeal={handleLogMyMeal} mealType={selectedMealType} today={today} />
         </div>
     );
 };
@@ -702,7 +713,7 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
         }
     };
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Añadir a ${mealType}`}>
+        <Modal isOpen={isOpen} onClose={onClose} title={`Añadir Alimento a ${mealType}`}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div><label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Buscar Alimento</label><input type="text" id="search" placeholder="Ej: Pollo, Arroz..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" /></div>
                 <div><label htmlFor="food" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seleccionar Alimento</label><select id="food" value={selectedFoodId} onChange={(e) => setSelectedFoodId(e.target.value)} className="w-full p-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">{Array.isArray(filteredFoodDatabase) && filteredFoodDatabase.map(food => (<option key={food.id} value={food.id}>{food.name}</option>))}</select></div>
@@ -712,6 +723,34 @@ const AddFoodModal = ({ isOpen, onClose, foodDatabase, handleLogFood, mealType, 
         </Modal>
     );
 };
+
+const AddMyMealModal = ({ isOpen, onClose, myMeals, handleLogMyMeal, mealType, today }) => {
+    const handleMealSelect = (meal) => {
+        handleLogMyMeal(meal, mealType, today);
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={`Añadir Receta a ${mealType}`}>
+            <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700 dark:text-gray-200">Selecciona una de tus recetas guardadas:</h4>
+                {myMeals && myMeals.length > 0 ? (
+                    <ul className="space-y-2 max-h-80 overflow-y-auto">
+                        {myMeals.map(meal => (
+                            <li key={meal.id} onClick={() => handleMealSelect(meal)} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
+                                <p className="font-bold text-blue-600 dark:text-blue-400">{meal.name}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">{meal.ingredients.length} ingredientes</p>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-center text-gray-500 dark:text-gray-400 p-4">No tienes recetas guardadas. ¡Crea una en la sección "Mis Recetas"!</p>
+                )}
+            </div>
+        </Modal>
+    );
+};
+
 
 const ProgressTracker = ({ weightHistory, bodyMeasurements, handleAddWeight, handleAddMeasurements, handleGoBack }) => {
     const [newWeight, setNewWeight] = useState('');
@@ -749,17 +788,346 @@ const ProgressTracker = ({ weightHistory, bodyMeasurements, handleAddWeight, han
     );
 };
 
+// --- NUEVO COMPONENTE ---
+// Modal para el escáner de códigos de barras.
+const BarcodeScannerModal = ({ isOpen, onClose, onFoodScanned }) => {
+    const videoRef = useRef(null);
+    const codeReaderRef = useRef(null);
+    const [scanResult, setScanResult] = useState(null);
+    const [foodData, setFoodData] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Inicializar el lector de códigos de barras cuando el modal se abre
+            if (typeof ZXing === 'undefined') {
+                setError("La librería de escaneo no se pudo cargar. Refresca la página.");
+                return;
+            }
+            codeReaderRef.current = new ZXing.BrowserMultiFormatReader();
+            startScan();
+        } else {
+            // Detener el escaneo y la cámara cuando el modal se cierra
+            stopScan();
+        }
+
+        return () => {
+            stopScan();
+        };
+    }, [isOpen]);
+
+    const startScan = async () => {
+        try {
+            setError(null);
+            setScanResult(null);
+            setFoodData(null);
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                codeReaderRef.current.decodeFromVideoDevice(undefined, videoRef.current, (result, err) => {
+                    if (result) {
+                        handleScan(result.getText());
+                    }
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error('Scan Error:', err);
+                        setError("Ocurrió un error durante el escaneo.");
+                    }
+                });
+            }
+        } catch (err) {
+            console.error('Camera Error:', err);
+            setError("No se pudo acceder a la cámara. Revisa los permisos en tu navegador.");
+        }
+    };
+
+    const stopScan = () => {
+        if (codeReaderRef.current) {
+            codeReaderRef.current.reset();
+        }
+        if (videoRef.current && videoRef.current.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+            videoRef.current.srcObject = null;
+        }
+    };
+
+    const handleScan = async (barcode) => {
+        if (isLoading || foodData) return; // Evitar escaneos múltiples
+        stopScan();
+        setScanResult(barcode);
+        setIsLoading(true);
+        try {
+            const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+            const data = await response.json();
+            if (data.status === 1 && data.product) {
+                const p = data.product;
+                const nutriments = p.nutriments || {};
+                const newFood = {
+                    name: p.product_name || 'Nombre no encontrado',
+                    calories_per_100g: nutriments['energy-kcal_100g'] || 0,
+                    protein_per_100g: nutriments.proteins_100g || 0,
+                    carbs_per_100g: nutriments.carbohydrates_100g || 0,
+                    fat_per_100g: nutriments.fat_100g || 0,
+                };
+                setFoodData(newFood);
+            } else {
+                setError(`Producto con código de barras ${barcode} no encontrado en la base de datos.`);
+            }
+        } catch (err) {
+            console.error("API Error:", err);
+            setError("No se pudo conectar con la base de datos de alimentos.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    const handleSaveFood = () => {
+        if (foodData) {
+            onFoodScanned(foodData);
+            onClose();
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Escanear Código de Barras">
+            <div className="flex flex-col items-center">
+                {!foodData && (
+                    <div className="w-full max-w-sm h-64 bg-gray-900 rounded-lg overflow-hidden relative">
+                        <video ref={videoRef} className="w-full h-full object-cover" />
+                         <div className="absolute inset-0 border-4 border-red-500/50 rounded-lg" style={{ clipPath: 'polygon(0% 0%, 0% 100%, 25% 100%, 25% 25%, 75% 25%, 75% 75%, 25% 75%, 25% 100%, 100% 100%, 100% 0%)' }}></div>
+                    </div>
+                )}
+
+                {error && (
+                    <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 rounded-lg text-center">
+                        <CameraOff className="mx-auto mb-2" />
+                        <p className="font-semibold">{error}</p>
+                    </div>
+                )}
+
+                {isLoading && <p className="mt-4 font-semibold animate-pulse">Buscando producto...</p>}
+
+                {foodData && (
+                    <div className="w-full mt-4 text-left">
+                        <h4 className="text-2xl font-bold text-blue-600 dark:text-blue-400">{foodData.name}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Información por 100g</p>
+                        <div className="grid grid-cols-2 gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                            <p><strong>Calorías:</strong> {Math.round(foodData.calories_per_100g)} kcal</p>
+                            <p><strong>Proteínas:</strong> {foodData.protein_per_100g.toFixed(1)} g</p>
+                            <p><strong>Carbohidratos:</strong> {foodData.carbs_per_100g.toFixed(1)} g</p>
+                            <p><strong>Grasas:</strong> {foodData.fat_per_100g.toFixed(1)} g</p>
+                        </div>
+                    </div>
+                )}
+                
+                <div className="mt-6 flex gap-4 w-full">
+                    {foodData ? (
+                        <>
+                            <Button onClick={startScan} variant="secondary" className="w-full">Escanear Otro</Button>
+                            <Button onClick={handleSaveFood} className="w-full">Guardar Alimento</Button>
+                        </>
+                    ) : (
+                         <Button onClick={onClose} variant="secondary" className="w-full">Cancelar</Button>
+                    )}
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
+
 const FoodDatabaseManager = ({ foodDatabase, handleAddFood, handleDeleteFood, handleGoBack }) => {
     const [name, setName] = useState(''); const [calories, setCalories] = useState(''); const [protein, setProtein] = useState(''); const [carbs, setCarbs] = useState(''); const [fat, setFat] = useState('');
+    const [isScannerOpen, setIsScannerOpen] = useState(false); // --- NUEVO ESTADO ---
+
     const handleSubmit = (e) => { e.preventDefault(); if(name && calories && protein && carbs && fat) { handleAddFood({ name, calories_per_100g: parseFloat(calories), protein_per_100g: parseFloat(protein), carbs_per_100g: parseFloat(carbs), fat_per_100g: parseFloat(fat) }); setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat(''); } };
+    
+    const handleFoodScanned = (foodData) => {
+        // Esta función recibe los datos del escáner y los añade a la base de datos.
+        handleAddFood(foodData);
+        setIsScannerOpen(false); // Cierra el modal después de guardar
+    };
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-800 dark:text-white">Mis Alimentos</h2><Button onClick={handleGoBack} variant="secondary">Volver</Button></div>
-            <Card className="mb-6"><h3 className="font-bold text-lg mb-3">Añadir Nuevo Alimento</h3><form onSubmit={handleSubmit} className="grid grid-cols-2 md:grid-cols-3 gap-4 items-end"><input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded col-span-2 md:col-span-1" /><input value={calories} onChange={e => setCalories(e.target.value)} type="number" placeholder="Kcal/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" /><input value={protein} onChange={e => setProtein(e.target.value)} type="number" placeholder="Prot/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" /><input value={carbs} onChange={e => setCarbs(e.target.value)} type="number" placeholder="Carbs/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" /><input value={fat} onChange={e => setFat(e.target.value)} type="number" placeholder="Grasa/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" /><Button type="submit" className="h-10">Añadir</Button></form></Card>
+            
+            {/* --- SECCIÓN MODIFICADA --- */}
+            <Card className="mb-6">
+                <h3 className="font-bold text-lg mb-3">Añadir Nuevo Alimento</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <Button onClick={() => setIsScannerOpen(true)} className="h-16 flex-col">
+                        <ScanLine size={24} className="mb-1" />
+                        Escanear Producto
+                    </Button>
+                    <div className="md:hidden border-b border-gray-200 dark:border-gray-700 my-2"></div>
+                    <p className="hidden md:block text-center self-center text-gray-400 font-bold">Ó</p>
+                    <div className="md:hidden border-b border-gray-200 dark:border-gray-700 my-2"></div>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <p className="text-sm text-center text-gray-500 dark:text-gray-400 -mt-3 mb-4">Añadir manualmente</p>
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del alimento" className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded" />
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <input value={calories} onChange={e => setCalories(e.target.value)} type="number" placeholder="Kcal/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" />
+                        <input value={protein} onChange={e => setProtein(e.target.value)} type="number" placeholder="Prot/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" />
+                        <input value={carbs} onChange={e => setCarbs(e.target.value)} type="number" placeholder="Carbs/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" />
+                        <input value={fat} onChange={e => setFat(e.target.value)} type="number" placeholder="Grasa/100g" className="p-2 bg-gray-100 dark:bg-gray-700 border rounded" />
+                    </div>
+                    <Button type="submit" className="w-full">Añadir Manualmente</Button>
+                </form>
+            </Card>
+
             <Card><h3 className="font-bold text-lg mb-3">Alimentos Guardados</h3><ul className="space-y-2 max-h-96 overflow-y-auto">{Array.isArray(foodDatabase) && foodDatabase.map(food => (<li key={food.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md"><span>{food.name}</span><button onClick={() => handleDeleteFood(food.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18} /></button></li>))}</ul></Card>
+            
+            <BarcodeScannerModal 
+                isOpen={isScannerOpen}
+                onClose={() => setIsScannerOpen(false)}
+                onFoodScanned={handleFoodScanned}
+            />
         </div>
     );
 };
+
+const MyMealsManager = ({ myMeals, foodDatabase, handleAddMyMeal, handleDeleteMyMeal, handleGoBack }) => {
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+    const calculateTotalMacros = (ingredients) => {
+        return ingredients.reduce((totals, ing) => {
+            const foodData = foodDatabase.find(f => f.id === ing.foodId);
+            if (foodData) {
+                const ratio = (ing.quantity || 0) / 100;
+                totals.calories += (foodData.calories_per_100g || 0) * ratio;
+                totals.protein += (foodData.protein_per_100g || 0) * ratio;
+                totals.carbs += (foodData.carbs_per_100g || 0) * ratio;
+                totals.fat += (foodData.fat_per_100g || 0) * ratio;
+            }
+            return totals;
+        }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+    };
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Mis Recetas</h2>
+                <Button onClick={handleGoBack} variant="secondary">Volver</Button>
+            </div>
+            <Card>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-lg">Recetas Guardadas</h3>
+                    <Button onClick={() => setIsCreateModalOpen(true)}><PlusCircle size={18} /> Crear Nueva Receta</Button>
+                </div>
+                <div className="space-y-3">
+                    {myMeals && myMeals.length > 0 ? myMeals.map(meal => {
+                        const totals = calculateTotalMacros(meal.ingredients);
+                        return (
+                            <div key={meal.id} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="font-bold text-xl text-blue-600 dark:text-blue-400">{meal.name}</h4>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1">
+                                            <span><strong className="text-gray-700 dark:text-gray-300">Kcal:</strong> {Math.round(totals.calories)}</span>
+                                            <span><strong className="text-gray-700 dark:text-gray-300">Prot:</strong> {Math.round(totals.protein)}g</span>
+                                            <span><strong className="text-gray-700 dark:text-gray-300">Carbs:</strong> {Math.round(totals.carbs)}g</span>
+                                            <span><strong className="text-gray-700 dark:text-gray-300">Grasas:</strong> {Math.round(totals.fat)}g</span>
+                                        </div>
+                                    </div>
+                                    <Button onClick={() => handleDeleteMyMeal(meal.id)} variant="danger" className="p-2 h-9 w-9"><Trash2 size={16} /></Button>
+                                </div>
+                            </div>
+                        )
+                    }) : (
+                        <p className="text-center text-gray-500 dark:text-gray-400 p-6">Aún no has creado ninguna receta. ¡Crea una para registrar tus comidas más rápido!</p>
+                    )}
+                </div>
+            </Card>
+            <CreateMealModal 
+                isOpen={isCreateModalOpen} 
+                onClose={() => setIsCreateModalOpen(false)} 
+                foodDatabase={foodDatabase}
+                onSave={handleAddMyMeal}
+            />
+        </div>
+    );
+};
+
+const CreateMealModal = ({ isOpen, onClose, foodDatabase, onSave }) => {
+    const [mealName, setMealName] = useState('');
+    const [ingredients, setIngredients] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredFood = useMemo(() => {
+        if (!searchTerm) return foodDatabase;
+        return foodDatabase.filter(food => food.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [searchTerm, foodDatabase]);
+
+    const addIngredient = (food) => {
+        if (!ingredients.some(ing => ing.foodId === food.id)) {
+            setIngredients([...ingredients, { foodId: food.id, name: food.name, quantity: 100 }]);
+        }
+    };
+
+    const updateIngredientQuantity = (foodId, quantity) => {
+        setIngredients(ingredients.map(ing => ing.foodId === foodId ? { ...ing, quantity: parseInt(quantity, 10) || 0 } : ing));
+    };
+
+    const removeIngredient = (foodId) => {
+        setIngredients(ingredients.filter(ing => ing.foodId !== foodId));
+    };
+    
+    const handleSave = () => {
+        if (mealName.trim() && ingredients.length > 0) {
+            const mealData = {
+                name: mealName.trim(),
+                ingredients: ingredients.map(({foodId, quantity}) => ({foodId, quantity})),
+            };
+            onSave(mealData);
+            setMealName('');
+            setIngredients([]);
+            onClose();
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Crear Nueva Receta">
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de la Receta</label>
+                    <input type="text" value={mealName} onChange={e => setMealName(e.target.value)} placeholder="Ej: Batido Post-Entreno" className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg" />
+                </div>
+                
+                <div className="border-t border-b border-gray-200 dark:border-gray-700 py-4">
+                    <h4 className="font-semibold mb-2">Ingredientes</h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                        {ingredients.map(ing => (
+                            <div key={ing.foodId} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900/50 rounded">
+                                <span className="flex-grow font-semibold">{ing.name}</span>
+                                <input type="number" value={ing.quantity} onChange={e => updateIngredientQuantity(ing.foodId, e.target.value)} className="w-20 p-1 text-center bg-white dark:bg-gray-700 border rounded" />
+                                <span>g</span>
+                                <button onClick={() => removeIngredient(ing.foodId)} className="text-red-500"><X size={18}/></button>
+                            </div>
+                        ))}
+                         {ingredients.length === 0 && <p className="text-xs text-center text-gray-400">Añade ingredientes desde la lista de abajo.</p>}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Añadir Ingrediente</label>
+                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar en Mis Alimentos..." className="w-full p-2 bg-gray-100 dark:bg-gray-700 border rounded-lg mb-2" />
+                    <ul className="max-h-48 overflow-y-auto border rounded-lg p-1 bg-gray-50 dark:bg-gray-900/50">
+                        {filteredFood.map(food => (
+                            <li key={food.id} onClick={() => addIngredient(food)} className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded cursor-pointer">
+                                {food.name}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4"><Button onClick={onClose} variant="secondary">Cancelar</Button><Button onClick={handleSave}>Guardar Receta</Button></div>
+            </div>
+        </Modal>
+    );
+};
+
 
 const AppSettings = ({ user, userData, handleLogin, handleRegister, handleLogout, handleUpdateGoals, handleUpdateObjective }) => {
     const [authMode, setAuthMode] = useState('login');
@@ -947,11 +1315,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
         }, 0) : 0;
     }, [routine]);
 
-    // --- CAMBIO PRINCIPAL ---
-    // Se ha refactorizado este componente para mostrar siempre los campos correctos 
-    // para los ejercicios de distancia (correr, nadar, etc.), incluso si la IA 
-    // los clasifica incorrectamente. Ahora, si un ejercicio contiene palabras clave 
-    // como "correr" o "natacion", mostrará los campos de distancia, duración e intensidad.
     const RenderExerciseMetrics = ({ exercise, index }) => {
         const metrics = exercise.metrics || {};
         const inputClasses = "w-full p-2 h-10 text-center bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:ring-2 focus:ring-blue-500";
@@ -981,7 +1344,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
                     );
                 }
                 
-                // Default for other distance cardio
                 return (
                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 items-end">
                         <MetricStepper label="Distancia (km)" value={metrics.distance || '0'} onUpdate={(val) => handleMetricUpdate(index, 'distance', val)} step={0.1} />
@@ -994,7 +1356,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
                 );
             case EXERCISE_TYPES.CARDIO_DURATION:
             case EXERCISE_TYPES.SPORT:
-                 // Verifica si este ejercicio, a pesar de su tipo, debería tener métricas de distancia.
                  const isMiscategorizedAsSwimming = normalizeString(exercise.name.toLowerCase()).includes('natacion');
                  const isMiscategorizedAsDistance = !isMiscategorizedAsSwimming && CARDIO_DISTANCE_KEYWORDS.some(k => normalizeString(exercise.name.toLowerCase()).includes(k));
 
@@ -1024,7 +1385,6 @@ const ActiveWorkoutView = ({ userData, handleGoBack, handleSaveWorkout, inProgre
                      );
                  }
 
-                 // Vista original para ejercicios que están correctamente tipados como duración/deporte sin distancia
                  return (
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 items-end">
                         <MetricStepper label="Duración (min)" value={metrics.duration || '0'} onUpdate={(val) => handleMetricUpdate(index, 'duration', val)} step={5} />
@@ -1635,6 +1995,7 @@ const WorkoutCreationView = ({ userData, setView, setInProgressWorkout, handleTo
 export default function App() {
     const [isAuthReady, setIsAuthReady] = useState(false); const [firebaseServices, setFirebaseServices] = useState(null); const [user, setUser] = useState(null); const [view, setView] = useState('dashboard'); const [isDarkMode, setIsDarkMode] = useState(true);
     const [userData, setUserData] = useState(null); const [dailyLog, setDailyLog] = useState({}); const [weightHistory, setWeightHistory] = useState([]); const [foodDatabase, setFoodDatabase] = useState([]); const [bodyMeasurements, setBodyMeasurements] = useState([]); const [completedWorkouts, setCompletedWorkouts] = useState([]); const [creatineLog, setCreatineLog] = useState([]); const [inProgressWorkout, setInProgressWorkout] = useState(null);
+    const [myMeals, setMyMeals] = useState([]);
 
     useEffect(() => {
         const auth = getAuth(app); const db = getFirestore(app); setFirebaseServices({ auth, db, app });
@@ -1645,7 +2006,7 @@ export default function App() {
             } else {
                 if (isInitialAuthCheck && typeof __firebase_config !== 'undefined') {
                     try { await signInAnonymously(auth); } catch (error) { console.error("Initial anonymous sign-in failed:", error); setUser(null); }
-                } else { setUser(null); setUserData(null); setDailyLog({}); setWeightHistory([]); setFoodDatabase([]); setBodyMeasurements([]); setCompletedWorkouts([]); setCreatineLog([]); setInProgressWorkout(null); }
+                } else { setUser(null); setUserData(null); setDailyLog({}); setWeightHistory([]); setFoodDatabase([]); setBodyMeasurements([]); setCompletedWorkouts([]); setCreatineLog([]); setInProgressWorkout(null); setMyMeals([]); }
             }
             isInitialAuthCheck = false;
             setIsAuthReady(true);
@@ -1672,7 +2033,8 @@ export default function App() {
         const unsubWorkouts = onSnapshot(collection(db, `${userDocPath}/completedWorkouts`), (snap) => setCompletedWorkouts(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date))));
         const unsubCreatine = onSnapshot(collection(db, `${userDocPath}/creatineLog`), (snap) => setCreatineLog(snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => b.date.toDate() - a.date.toDate())));
         const unsubInProgress = onSnapshot(doc(db, `${userDocPath}/inProgressWorkout/current`), (docSnapshot) => { if (docSnapshot.exists()) { setInProgressWorkout(docSnapshot.data()); } else { setInProgressWorkout(null); } });
-        return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); };
+        const unsubMyMeals = onSnapshot(collection(db, `${userDocPath}/myMeals`), (snap) => setMyMeals(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
+        return () => { unsubUser(); unsubLogs(); unsubWeight(); unsubFood(); unsubMeasurements(); unsubWorkouts(); unsubCreatine(); unsubInProgress(); unsubMyMeals(); };
     }, [isAuthReady, firebaseServices, user]);
 
     useEffect(() => {
@@ -1739,6 +2101,44 @@ export default function App() {
             await updateDoc(userDocRef, { favoriteExercises: arrayUnion({ ...exerciseToSave, type: exerciseType, metrics: exerciseMetrics }) });
         }
     };
+    
+    const handleAddMyMeal = async (mealData) => {
+        if (!firebaseServices || !user) return;
+        await addDoc(collection(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/myMeals`), mealData);
+    };
+
+    const handleDeleteMyMeal = async (mealId) => {
+        if (!firebaseServices || !user) return;
+        await deleteDoc(doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/myMeals`, mealId));
+    };
+
+    const handleLogMyMeal = async (meal, mealType, date) => {
+        if (!firebaseServices || !user || !foodDatabase) return;
+        
+        const foodsToLog = meal.ingredients.map(ingredient => {
+            const foodData = foodDatabase.find(f => f.id === ingredient.foodId);
+            if (!foodData) return null;
+            
+            const ratio = (ingredient.quantity || 0) / 100;
+            return {
+                foodId: foodData.id,
+                foodName: foodData.name,
+                quantity: Number(ingredient.quantity),
+                meal: mealType,
+                calories: (foodData.calories_per_100g || 0) * ratio,
+                protein: (foodData.protein_per_100g || 0) * ratio,
+                carbs: (foodData.carbs_per_100g || 0) * ratio,
+                fat: (foodData.fat_per_100g || 0) * ratio,
+            };
+        }).filter(Boolean);
+
+        if (foodsToLog.length > 0) {
+            const logRef = doc(firebaseServices.db, `artifacts/${appId}/users/${user.uid}/dailyLogs`, date);
+            const batch = writeBatch(firebaseServices.db);
+            batch.set(logRef, { loggedFoods: arrayUnion(...foodsToLog) }, { merge: true });
+            await batch.commit();
+        }
+    };
 
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
@@ -1748,10 +2148,11 @@ export default function App() {
 
     const renderView = () => {
         switch (view) {
-            case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} handleLogFood={handleLogFood} handleGoBack={() => setView('dashboard')} />;
+            case 'food': return <FoodLogger dailyLog={dailyLog} foodDatabase={foodDatabase} myMeals={myMeals} handleLogFood={handleLogFood} handleLogMyMeal={handleLogMyMeal} handleGoBack={() => setView('dashboard')} />;
             case 'workout': return <WorkoutPlanner userData={userData} handleUpdateSchedule={handleUpdateSchedule} handleUpdateWorkoutOptions={handleUpdateWorkoutOptions} handleGoBack={() => setView('dashboard')} />;
             case 'progress': return <ProgressTracker weightHistory={weightHistory} bodyMeasurements={bodyMeasurements} handleAddWeight={handleAddWeight} handleAddMeasurements={handleAddMeasurements} handleGoBack={() => setView('dashboard')} />;
             case 'database': return <FoodDatabaseManager foodDatabase={foodDatabase} handleAddFood={handleAddFood} handleDeleteFood={handleDeleteFood} handleGoBack={() => setView('dashboard')} />;
+            case 'mymeals': return <MyMealsManager myMeals={myMeals} foodDatabase={foodDatabase} handleAddMyMeal={handleAddMyMeal} handleDeleteMyMeal={handleDeleteMyMeal} handleGoBack={() => setView('dashboard')} />;
             case 'settings': return <AppSettings user={user} userData={userData} handleRegister={handleRegister} handleLogin={handleLogin} handleLogout={handleLogout} handleUpdateGoals={handleUpdateGoals} handleUpdateObjective={handleUpdateObjective} />;
             case 'history': return <HistoryTracker completedWorkouts={completedWorkouts} handleGoBack={() => setView('dashboard')} handleUpdateWorkoutLog={handleUpdateWorkoutLog} handleDeleteWorkoutLog={handleDeleteWorkoutLog} />;
             case 'workout-creation': return <WorkoutCreationView userData={userData} setView={setView} setInProgressWorkout={handleSetInProgressWorkout} handleToggleFavorite={handleToggleFavorite} completedWorkouts={completedWorkouts} />;
@@ -1769,6 +2170,8 @@ export default function App() {
 
     return (
         <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen font-sans">
+             {/* --- SCRIPT PARA EL ESCÁNER --- */}
+             <script src="https://unpkg.com/@zxing/library@latest/umd/zxing.min.js"></script>
              <style>{`
                 /* Ocultar flechas de los inputs numéricos en Chrome, Safari, Edge, Opera */
                 input[type=number]::-webkit-inner-spin-button,
@@ -1793,6 +2196,7 @@ export default function App() {
                          <NavItem icon={User} label="Progreso" viewName="progress" />
                          <NavItem icon={Utensils} label="Comidas" viewName="food" />
                          <NavItem icon={PlusCircle} label="Mis Alimentos" viewName="database" />
+                         <NavItem icon={BookCopy} label="Mis Recetas" viewName="mymeals" />
                          <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                          <div className="mt-auto"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 mt-2">{isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span></button></div>
                      </div>
@@ -1805,6 +2209,7 @@ export default function App() {
                          <NavItem icon={User} label="Progreso" viewName="progress" />
                          <NavItem icon={Utensils} label="Comidas" viewName="food" />
                          <NavItem icon={PlusCircle} label="Alimentos" viewName="database" />
+                         <NavItem icon={BookCopy} label="Recetas" viewName="mymeals" />
                          <NavItem icon={SettingsIcon} label="Ajustes" viewName="settings" />
                          <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg flex-shrink-0">{isDarkMode ? <Sun size={22} /> : <Moon size={22} />}<span className="text-xs font-medium">{isDarkMode ? 'Claro' : 'Oscuro'}</span></button>
                      </div>
